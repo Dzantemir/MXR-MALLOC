@@ -1,0 +1,248 @@
+menu "MxR-malloc"
+
+# ============================================================
+#  Preset selection
+# ============================================================
+
+choice
+    prompt "Allocation preset"
+    default MXR_PRESET_CUSTOM
+    help
+        Select a memory layout preset tuned for a typical workload,
+        or Custom to configure regions manually.
+
+        Every preset drives MXR_REGIONS / MXR_REGION_SIZES /
+        MXR_REGION_PERCENTS through the same Kconfig parser.
+        The last region is always unlimited and absorbs leftover memory.
+
+    config MXR_PRESET_CUSTOM
+        bool "Custom - manual configuration"
+
+    config MXR_PRESET_BALANCED
+        bool "Balanced - general purpose (3 regions)"
+
+    config MXR_PRESET_MINIMAL
+        bool "Minimal - bare-metal, no WiFi (2 regions)"
+
+    config MXR_PRESET_WIFI_STATION
+        bool "WiFi Station - LWIP client (3 regions)"
+
+    config MXR_PRESET_WIFI_AP
+        bool "WiFi AP - many clients (4 regions)"
+
+    config MXR_PRESET_TLS
+        bool "TLS / HTTPS - mbedtls (4 regions)"
+
+    config MXR_PRESET_AUDIO
+        bool "Audio / Streaming - ADPCM, I2S, TCP (4 regions)"
+
+    config MXR_PRESET_HTTP_SERVER
+        bool "HTTP Server - esp_http_server (4 regions)"
+
+    config MXR_PRESET_SENSOR
+        bool "Sensor / Low-power (3 regions)"
+
+    config MXR_PRESET_LOGGING
+        bool "Logging / Debug - heavy ESP_LOG (3 regions)"
+
+endchoice
+
+# ============================================================
+#  Global settings
+# ============================================================
+
+config MXR_MAX_DESC
+    int "Maximum simultaneous allocations"
+    range 16 4096
+    default 256
+    help
+        Maximum number of active allocation descriptors.
+        Shared between DRAM and IRAM.
+
+config MXR_IRAM_HOT_PATH_DISABLED
+    bool "Disable placing malloc/free hot path in IRAM"
+    default n
+    help
+        By default MxR places core malloc/free hot path in IRAM.
+        Enable this if IRAM is insufficient.
+
+# ============================================================
+#  IRAM heap
+# ============================================================
+
+config MXR_USE_IRAM
+    bool "Enable IRAM heap (EXEC + 32BIT fallback)"
+    default y if !CONFIG_HEAP_DISABLE_IRAM
+    default n
+    help
+        Enable IRAM heap region.
+        MALLOC_CAP_EXEC allocations go to IRAM.
+        Ordinary 32BIT allocations use DRAM first.
+        If DRAM cannot allocate, IRAM is used as fallback.
+        DMA and 8BIT allocations never go to IRAM.
+
+config MXR_IRAM_RESERVE_BYTES
+    int "Reserve IRAM bytes for EXEC allocations"
+    depends on MXR_USE_IRAM
+    range 0 32768
+    default 2048
+    help
+        Reserve this many IRAM bytes for EXEC allocations.
+        Non-EXEC 32BIT fallback allocations will not consume
+        IRAM unless enough free space remains.
+        Set 0 to disable reserve.
+
+config MXR_IRAM_FALLBACK_MAX_BYTES
+    int "Maximum block size for IRAM fallback"
+    depends on MXR_USE_IRAM
+    range 0 65536
+    default 0
+    help
+        Maximum non-EXEC block size allowed to fallback into IRAM.
+        0 means unlimited.
+        EXEC allocations are not limited by this option.
+
+# ============================================================
+#  Cross-region DRAM fallback
+# ============================================================
+
+config MXR_CROSS_REGION_FALLBACK
+    bool "Enable cross-region DRAM fallback (last resort)"
+    default n
+    help
+      When a size-class region is full, try to allocate from
+      OTHER DRAM regions regardless of their size class.
+
+      This is a LAST RESORT mechanism. It causes fragmentation
+      of large-block regions by small allocations.
+
+      Disable (default): allocation fails if its own region and
+      IRAM are exhausted.
+      Enable: allocation may land in a non-matching region
+      before returning NULL.
+
+config MXR_CROSS_REGION_AFTER_IRAM
+    bool "Cross-region only after IRAM is exhausted"
+    depends on MXR_CROSS_REGION_FALLBACK && MXR_USE_IRAM
+    default y
+    help
+      Controls fallback order when both IRAM fallback and
+      cross-region fallback are enabled.
+
+      If y (recommended):
+        own region -> IRAM -> cross-region
+      IRAM is the primary fallback ("junk drawer"), cross-region
+      is the absolute last resort. This keeps DRAM regions
+      clean as long as possible.
+
+      If n:
+        own region -> cross-region -> IRAM
+      Cross-region is tried before IRAM. Use this if you want
+      to keep IRAM completely untouched for EXEC allocations.
+
+# ============================================================
+#  Region configuration (preset-driven)
+#
+#  Editable only in Custom mode. For every other preset the
+#  values come from the "default ... if MXR_PRESET_*" lines.
+# ============================================================
+
+config MXR_REGIONS
+    int "Number of heap regions" if MXR_PRESET_CUSTOM
+    range 2 16
+    default 3 if MXR_PRESET_CUSTOM
+    default 3 if MXR_PRESET_BALANCED
+    default 2 if MXR_PRESET_MINIMAL
+    default 3 if MXR_PRESET_WIFI_STATION
+    default 4 if MXR_PRESET_WIFI_AP
+    default 4 if MXR_PRESET_TLS
+    default 4 if MXR_PRESET_AUDIO
+    default 4 if MXR_PRESET_HTTP_SERVER
+    default 3 if MXR_PRESET_SENSOR
+    default 3 if MXR_PRESET_LOGGING
+    help
+        Total number of heap regions.
+        The last region is always unlimited and receives
+        remaining memory.
+
+config MXR_REGION_SIZES
+    string "Lower block size boundaries for regions, bytes" if MXR_PRESET_CUSTOM
+    default "4,132,1024"      if MXR_PRESET_CUSTOM
+    default "4,132,1024"      if MXR_PRESET_BALANCED
+    default "4,256"           if MXR_PRESET_MINIMAL
+    default "4,132,1500"      if MXR_PRESET_WIFI_STATION
+    default "4,96,512,1500"   if MXR_PRESET_WIFI_AP
+    default "4,132,1024,4096" if MXR_PRESET_TLS
+    default "4,256,1024,4096" if MXR_PRESET_AUDIO
+    default "4,132,512,2048"  if MXR_PRESET_HTTP_SERVER
+    default "4,64,256"        if MXR_PRESET_SENSOR
+    default "4,96,512"        if MXR_PRESET_LOGGING
+    help
+        Comma-separated lower block size boundaries in bytes.
+        Count must be equal to MXR_REGIONS.
+        Values are converted to 4-byte units.
+
+config MXR_REGION_PERCENTS
+    string "Memory weights for regions" if MXR_PRESET_CUSTOM
+    default "15,45,20"    if MXR_PRESET_CUSTOM
+    default "15,45,0"     if MXR_PRESET_BALANCED
+    default "30,0"        if MXR_PRESET_MINIMAL
+    default "15,45,0"     if MXR_PRESET_WIFI_STATION
+    default "12,25,30,0"  if MXR_PRESET_WIFI_AP
+    default "10,20,25,0"  if MXR_PRESET_TLS
+    default "10,25,25,0"  if MXR_PRESET_AUDIO
+    default "12,25,30,0"  if MXR_PRESET_HTTP_SERVER
+    default "20,30,0"     if MXR_PRESET_SENSOR
+    default "25,40,0"     if MXR_PRESET_LOGGING
+    help
+        Comma-separated percent weights.
+        Count must be equal to MXR_REGIONS.
+        Sum must be <= 100.
+        If the last value is 0, the last region receives
+        all remaining memory.
+
+# ============================================================
+#  Search mode
+# ============================================================
+
+choice
+    prompt "Free block search mode"
+    default MXR_SEARCH_DESCRIPTOR
+
+    config MXR_SEARCH_DESCRIPTOR
+        bool "Descriptor gap search"
+
+    config MXR_SEARCH_BITMAP
+        bool "Bitmap accelerated search (carved from arena, DRAM only)"
+
+endchoice
+
+# ============================================================
+#  Linker integration
+# ============================================================
+
+menu "Linker integration"
+
+config MXR_WRAP_HEAP_QUERY
+    bool "Wrap heap_caps_get_free_size / minimum / dram"
+    default y
+
+config MXR_WRAP_DEFAULT_POOL
+    bool "Wrap heap_caps_malloc_default / realloc_default"
+    default y
+
+config MXR_WRAP_ESP_SYSTEM
+    bool "Wrap esp_get_free_heap_size / minimum / internal"
+    default y
+
+config MXR_WRAP_LIBC
+    bool "Wrap plain malloc / free / calloc / realloc / zalloc"
+    default n
+
+config MXR_WARN_HEAP_TRACING
+    bool "Warn if CONFIG_HEAP_TRACING is enabled"
+    default y
+
+endmenu
+
+endmenu
