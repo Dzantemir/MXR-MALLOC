@@ -195,6 +195,7 @@ IRAM success?         DRAM success?       DRAM success?
 | `MALLOC_CAP_INTERNAL` | DRAM only | internal RAM |
 | `MALLOC_CAP_EXEC` | IRAM only | executable memory |
 | `MALLOC_CAP_EXEC \| 32BIT` | IRAM only | executable 32-bit memory |
+| Cross-region fallback | Other DRAM regions | Only if `CONFIG_MXR_CROSS_REGION_FALLBACK=y` and own region + IRAM exhausted |
 | `MALLOC_CAP_SPIRAM` | `NULL` | not supported on ESP8266 |
 
 ### Fallback chain (32BIT / default)
