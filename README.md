@@ -12,7 +12,7 @@
   with size-class regions, IRAM fallback, cross-region fallback, and optional bitmap acceleration.
 </p>
 
-
+---
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@
 * [FAQ](#faq)
 * [License](#license)
 
-
+---
 
 ## Overview
 
@@ -57,7 +57,7 @@ Ordinary allocations go to **DRAM first**. When DRAM is exhausted, 32-bit
 allocations **fall back to IRAM**. Executable memory (`MALLOC\_CAP\_EXEC`) is
 served **exclusively from IRAM**.
 
-
+---
 
 ## Features
 
@@ -80,7 +80,7 @@ resort (disabled by default to avoid fragmentation).
 * **Word-wise copy/clear** — `realloc`/`calloc`/`zalloc` never emit byte stores
 into IRAM (IRAM is 32-bit access only).
 
-
+---
 
 ## Architecture
 
@@ -155,7 +155,7 @@ IRAM success?         DRAM success?       DRAM success?
                                         DRAM ptr     NULL
 ```
 
-
+---
 
 ## Memory Layout
 
@@ -184,7 +184,7 @@ IRAM success?         DRAM success?       DRAM success?
     |             |  \[ reserve for EXEC ]     |
 ```
 
-
+---
 
 ## Allocation Policy
 
@@ -220,7 +220,7 @@ IRAM fallback is allowed when ALL of:
   - requested size <= CONFIG\_MXR\_IRAM\_FALLBACK\_MAX\_BYTES (0 = unlimited)
 ```
 
-
+---
 
 ## Descriptor Format
 
@@ -256,7 +256,7 @@ IRAM EXEC block:     off bit15 = 1, len bit15 = 1
 |Max arena size|32 768 units (131 072 bytes)|
 |Alignment|4 bytes|
 
-
+---
 
 ## Region Configuration
 
@@ -280,7 +280,7 @@ creates:
 If the percent sum is below 100, the remainder is added to the last region.
 If the last percent is `0`, the last region receives all remaining memory.
 
-
+---
 
 ## Search Modes
 
@@ -318,7 +318,7 @@ For 80 KB DRAM:
 * **RAM:** \~2.5 KB for an 80 KB arena (carved, not static)
 * **Covers:** DRAM only — IRAM always uses descriptor search
 
-
+---
 
 ## IRAM Support
 
@@ -353,7 +353,7 @@ Enable `MXR\_IRAM\_PATH\_ALLOC\_FAMILY` if allocations can run from contexts tha
 execute while flash cache is disabled (e.g. flash-write callbacks). Verify IRAM
 usage with `idf.py size` after enabling.
 
-
+---
 
 ## Cross-Region Fallback
 
@@ -395,7 +395,7 @@ cross\_region\_allocs=17   <- if this grows, increase own region percent
 If the counter grows steadily, your `MXR\_REGION\_PERCENTS` are misconfigured —
 the own region is chronically undersized.
 
-
+---
 
 ## Installation
 
@@ -434,7 +434,7 @@ idf.py build
 > Always run `fullclean` after changing MxR Kconfig options. Stale `sdkconfig`
 > values can otherwise override the new defaults.
 
-
+---
 
 ## Configuration
 
@@ -488,7 +488,7 @@ idf.py build
 |`MXR\_WRAP\_LIBC`|`n`|`malloc`, `free`, `calloc`, `realloc`, `zalloc`|
 |`MXR\_WARN\_HEAP\_TRACING`|`y`|Warn if `CONFIG\_HEAP\_TRACING` is enabled|
 
-
+---
 
 ## API Reference
 
@@ -529,7 +529,7 @@ esp\_get\_free\_heap\_size()            -> mxr\_get\_free\_size\_caps(MALLOC\_CA
 heap\_caps\_get\_dram\_free\_size()      -> mxr\_get\_free\_size\_caps(8BIT|32BIT|DMA)
 ```
 
-
+---
 
 ## Usage Examples
 
@@ -580,7 +580,7 @@ printf("free=%u min=%u desc=%u/%u exec=%u fallback=%u cross=%u invalid\_free=%u\
 mxr\_dump();
 ```
 
-
+---
 
 ## Comparison with Original Heap
 
@@ -605,7 +605,7 @@ Monitor `alloc\_fail\_table\_full` and raise `MXR\_MAX\_DESC` if needed.
 3. **`realloc(ptr, 0)`** — frees the block and returns `NULL`
 (configurable via `MXR\_REALLOC\_ZERO\_FREES`).
 
-
+---
 
 ## Performance Considerations
 
@@ -631,7 +631,7 @@ where N = number of active descriptors.
 |IRAM is tight|enable `MXR\_IRAM\_HOT\_PATH\_DISABLED`|
 |calloc/realloc during flash ops|enable `MXR\_IRAM\_PATH\_ALLOC\_FAMILY`|
 
-
+---
 
 ## Diagnostics
 
@@ -661,7 +661,7 @@ typedef struct {
 `mxr\_dump()` prints the full arena state: totals, per-region statistics, IRAM
 state, fallback counters and every live descriptor.
 
-
+---
 
 ## Project Structure
 
@@ -679,7 +679,7 @@ Alternative integration files (`mxr\_heap\_compat.c`, `mxr\_heap\_port.c`) are
 provided for replacement mode and must **never** be compiled together with the
 wrap layer.
 
-
+---
 
 ## FAQ
 
@@ -751,15 +751,14 @@ Define it in your project before including `mxr\_malloc.h`:
 #include "mxr\_malloc.h"
 ```
 
-
+---
 
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
-
+---
 
 <p align="center">
   <sub>Built for ESP8266 · Xtensa LX106 · FreeRTOS</sub>
 </p>
-
