@@ -1,8 +1,17 @@
 # MxR-malloc
 
-A descriptor-based memory allocator for **ESP8266 RTOS SDK**, engineered as a drop-in replacement for the standard `heap_caps` allocator.
+<p align="center">
+  <img src="https://img.shields.io/badge/ESP8266-RTOS%20SDK%20v3.4-blue" alt="ESP8266 RTOS SDK">
+  <img src="https://img.shields.io/badge/language-C99-green" alt="C99">
+  <img src="https://img.shields.io/badge/license-MIT-yellow" alt="License">
+  <img src="https://img.shields.io/badge/platform-Xtensa%20LX106-orange" alt="Platform">
+</p>
 
-Instead of embedding linked-list metadata inside every allocated block, MxR keeps a compact, sorted **descriptor table** outside the heap. Combined with size-class **regions**, an optional **IRAM heap**, and a configurable **fallback chain**, this yields lower fragmentation, zero per-block overhead, and full `heap_caps_*` API compatibility through linker `--wrap`.
+<p align="center">
+  <b>A descriptor-based memory allocator for **ESP8266 RTOS SDK**, engineered as a drop-in replacement for the standard `heap_caps` allocator.</b><br>
+  
+  Instead of embedding linked-list metadata inside every allocated block, MxR keeps a compact, sorted **descriptor table** outside the heap. Combined with size-class **regions**, an optional **IRAM heap**,     and a configurable **fallback chain**, this yields lower fragmentation, zero per-block overhead, and full `heap_caps_*` API compatibility through linker `--wrap`.
+</p>
 
 ---
 
