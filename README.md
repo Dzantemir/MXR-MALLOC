@@ -495,7 +495,7 @@ idf.py build
 ### Core API
 
 ```c
-/\* lifecycle + plain API \*/
+\* lifecycle + plain API \*/
 void  mxr\_init(void);
 void \*mxr\_malloc(size\_t size);
 void  mxr\_free(void \*ptr);
@@ -503,13 +503,13 @@ void \*mxr\_calloc(size\_t count, size\_t size);
 void \*mxr\_realloc(void \*ptr, size\_t size);
 void \*mxr\_zalloc(size\_t size);
 
-/\* capability-aware API \*/
+\* capability-aware API \*/
 void \*mxr\_malloc\_caps(size\_t size, uint32\_t caps);
 void \*mxr\_calloc\_caps(size\_t count, size\_t size, uint32\_t caps);
 void \*mxr\_realloc\_caps(void \*ptr, size\_t newsize, uint32\_t caps);
 void \*mxr\_zalloc\_caps(size\_t size, uint32\_t caps);
 
-/\* query + diagnostics \*/
+\* query + diagnostics \*/
 size\_t mxr\_get\_free\_size\_caps(uint32\_t caps);
 size\_t mxr\_get\_min\_free\_size\_caps(uint32\_t caps);
 void   mxr\_get\_status(mxr\_status\_t \*status);
