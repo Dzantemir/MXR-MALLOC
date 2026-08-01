@@ -154,18 +154,18 @@ shifts the tail. Removal shifts the tail left. With the default capacity of
 
 ```mermaid
 flowchart TD
-    Start["mxr_malloc_caps(size,<br/>caps)"]
+    Start["mxr_malloc_caps(size,<br>caps)"]
     Lock["mxr_lock()"]
-    Valid{"size valid?<br/>size ≤ 128 KB"}
+    Valid{"size valid?<br>size <= 128 KB"}
     FailNull["return NULL"]
     Units["units = ceil(size / 4)"]
     Exec{"caps has EXEC?"}
-    IramOnly["IRAM-only path<br/>find free from start"]
+    IramOnly["IRAM-only path<br>find free from start"]
     IramOk{"space found?"}
     InsertExec["insert descriptor (EXEC)"]
     Done["return pointer"]
-    Region["region =<br/>region_for_size(units, caps)"]
-    TryOwn{"own region<br/>has gap?"}
+    Region["region =<br>region_for_size(units, caps)"]
+    TryOwn{"own region<br>has gap?"}
     InsertDram["insert descriptor (DRAM)"]
     Fallback["fallback chain"]
     Done2["return pointer or NULL"]
@@ -203,8 +203,8 @@ default is **IRAM first, cross-region last**:
 ```mermaid
 flowchart LR
     Own["Own DRAM region"]
-    IRAM["IRAM fallback<br/>(non-EXEC 32-bit)"]
-    Cross["Cross-region DRAM<br/>(last resort)"]
+    IRAM["IRAM fallback<br>(non-EXEC 32-bit)"]
+    Cross["Cross-region DRAM<br>(last resort)"]
     Null["return NULL"]
     Own --> IRAM
     IRAM --> Cross
@@ -222,12 +222,12 @@ IRAM stays untouched for EXEC allocations.
 flowchart TD
     F["mxr_free(ptr)"]
     Lock["mxr_lock()"]
-    Arena{"which arena?<br/>mxr_ptr_to_arena"}
-    Inv["invalid_free_attempts++<br/>return"]
+    Arena{"which arena?<br>mxr_ptr_to_arena"}
+    Inv["invalid_free_attempts++<br>return"]
     OffD["off = ptr_to_units(ptr)"]
     FindD["binary search descriptor"]
     NotFound{"found?"}
-    ClearBm["clear bitmap range (if<br/>bitmap)"]
+    ClearBm["clear bitmap range (if<br>bitmap)"]
     RemoveD["remove descriptor"]
     Release["region_released(units)"]
     Ret["return"]
@@ -285,9 +285,9 @@ flowchart TD
     Same{"new == old?"}
     Keep["return ptr"]
     Shrink{"new < old?"}
-    ShrinkIP["shrink in place<br/>release tail"]
-    Grow{"gap after block<br/>≥ extra AND<br/>region size ok?"}
-    GrowIP["grow in place<br/>claim tail"]
+    ShrinkIP["shrink in place<br>release tail"]
+    Grow{"gap after block<br>>= extra AND<br>region size ok?"}
+    GrowIP["grow in place<br>claim tail"]
     Move["alloc new + copy + free old"]
     R --> Null
     Null -->|yes| Malloc
@@ -412,17 +412,17 @@ memory. The bitmap is DRAM-only; IRAM always uses a descriptor scan.
 ```mermaid
 flowchart TD
     I["mxr_init"]
-    Bounds["DRAM = _bss_end ..<br/>0x40000000<br/>align to 4 bytes"]
-    SizeOk{"units ≤ 32768?"}
+    Bounds["DRAM = _bss_end ..<br>0x40000000<br>align to 4 bytes"]
+    SizeOk{"units <= 32768?"}
     Abort["log error, abort init"]
     Bitmap{"bitmap mode?"}
-    Carve["carve bitmap from arena<br/>tail<br/>shrink usable units"]
-    Clear["clear descriptor table +<br/>stats"]
+    Carve["carve bitmap from arena<br>tail<br>shrink usable units"]
+    Clear["clear descriptor table +<br>stats"]
     Iram{"CONFIG_MXR_USE_IRAM?"}
-    IramInit["mxr_init_iram()<br/>_iram_end .. IRAM top"]
+    IramInit["mxr_init_iram()<br>_iram_end .. IRAM top"]
     Regions["mxr_init_regions_kconfig()"]
     Ok{"regions ok?"}
-    Stats["compute totals + largest<br/>free"]
+    Stats["compute totals + largest<br>free"]
     Single["fallback: single flat region"]
     Ready["s_initialized = true"]
     I --> Bounds
