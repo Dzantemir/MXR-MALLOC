@@ -1,17 +1,8 @@
 # MxR-malloc
 
-<p align="center">
-  <img src="https://img.shields.io/badge/ESP8266-RTOS%20SDK%20v3.4-blue" alt="ESP8266 RTOS SDK">
-  <img src="https://img.shields.io/badge/language-C99-green" alt="C99">
-  <img src="https://img.shields.io/badge/license-MIT-yellow" alt="License">
-  <img src="https://img.shields.io/badge/platform-Xtensa%20LX106-orange" alt="Platform">
-</p>
+A descriptor-based memory allocator for **ESP8266 RTOS SDK**, engineered as a drop-in replacement for the standard `heap_caps` allocator.
 
-<p align="center">
-  <b>A descriptor-based memory allocator for **ESP8266 RTOS SDK**, engineered as a drop-in replacement for the standard `heap_caps` allocator.</b><br>
-  
-  Instead of embedding linked-list metadata inside every allocated block, MxR keeps a compact, sorted **descriptor table** outside the heap. Combined with size-class **regions**, an optional **IRAM heap**,     and a configurable **fallback chain**, this yields lower fragmentation, zero per-block overhead, and full `heap_caps_*` API compatibility through linker `--wrap`.
-</p>
+Instead of embedding linked-list metadata inside every allocated block, MxR keeps a compact, sorted **descriptor table** outside the heap. Combined with size-class **regions**, an optional **IRAM heap**, and a configurable **fallback chain**, this yields lower fragmentation, zero per-block overhead, and full `heap_caps_*` API compatibility through linker `--wrap`.
 
 ---
 
@@ -152,40 +143,7 @@ shifts the tail. Removal shifts the tail left. With the default capacity of
 
 `mxr_malloc_caps(size, caps)` is the heart of the allocator.
 
-```mermaid
-flowchart TD
-    Start["mxr_malloc_caps(size,<br>caps)"]
-    Lock["mxr_lock()"]
-    Valid{"size valid?<br>size <= 128 KB"}
-    FailNull["return NULL"]
-    Units["units = ceil(size / 4)"]
-    Exec{"caps has EXEC?"}
-    IramOnly["IRAM-only path<br>find free from start"]
-    IramOk{"space found?"}
-    InsertExec["insert descriptor (EXEC)"]
-    Done["return pointer"]
-    Region["region =<br>region_for_size(units, caps)"]
-    TryOwn{"own region<br>has gap?"}
-    InsertDram["insert descriptor (DRAM)"]
-    Fallback["fallback chain"]
-    Done2["return pointer or NULL"]
-    Start --> Lock
-    Lock --> Valid
-    Valid -->|no| FailNull
-    Valid -->|yes| Units
-    Units --> Exec
-    Exec -->|yes| IramOnly
-    IramOnly --> IramOk
-    IramOk -->|no| FailNull
-    IramOk -->|yes| InsertExec
-    InsertExec --> Done
-    Exec -->|no| Region
-    Region --> TryOwn
-    TryOwn -->|yes| InsertDram
-    InsertDram --> Done
-    TryOwn -->|no| Fallback
-    Fallback --> Done2
-```
+![Allocation flow (malloc) — flowchart](images/allocation-flow-malloc.svg)
 
 ### Step by step
 
@@ -200,16 +158,7 @@ flowchart TD
 The order is compile-time configurable. With both features enabled, the
 default is **IRAM first, cross-region last**:
 
-```mermaid
-flowchart LR
-    Own["Own DRAM region"]
-    IRAM["IRAM fallback<br>(non-EXEC 32-bit)"]
-    Cross["Cross-region DRAM<br>(last resort)"]
-    Null["return NULL"]
-    Own --> IRAM
-    IRAM --> Cross
-    Cross --> Null
-```
+![Fallback chain — flowchart](images/fallback-chain.svg)
 
 Setting `CONFIG_MXR_CROSS_REGION_AFTER_IRAM=n` swaps the last two stages so
 IRAM stays untouched for EXEC allocations.
@@ -218,40 +167,7 @@ IRAM stays untouched for EXEC allocations.
 
 ## Free Flow (`free`)
 
-```mermaid
-flowchart TD
-    F["mxr_free(ptr)"]
-    Lock["mxr_lock()"]
-    Arena{"which arena?<br>mxr_ptr_to_arena"}
-    Inv["invalid_free_attempts++<br>return"]
-    OffD["off = ptr_to_units(ptr)"]
-    FindD["binary search descriptor"]
-    NotFound{"found?"}
-    ClearBm["clear bitmap range (if<br>bitmap)"]
-    RemoveD["remove descriptor"]
-    Release["region_released(units)"]
-    Ret["return"]
-    OffI["off = iram_ptr_to_units(ptr)"]
-    FindI["binary search descriptor"]
-    RemoveI["remove descriptor"]
-    ReleaseI["iram_released(units)"]
-    F --> Lock
-    Lock --> Arena
-    Arena -->|none| Inv
-    Arena -->|DRAM| OffD
-    OffD --> FindD
-    FindD --> NotFound
-    NotFound -->|no| Inv
-    NotFound -->|yes| ClearBm
-    ClearBm --> RemoveD
-    RemoveD --> Release
-    Release --> Ret
-    Arena -->|IRAM| OffI
-    OffI --> FindI
-    FindI --> RemoveI
-    RemoveI --> ReleaseI
-    ReleaseI --> Ret
-```
+![Free flow (free) — flowchart](images/free-flow.svg)
 
 Free is the mirror of malloc:
 
@@ -274,34 +190,7 @@ or wild pointer will not corrupt the heap.
 `mxr_realloc_caps` tries hard to resize **in place** before falling back to
 allocate-copy-free.
 
-```mermaid
-flowchart TD
-    R["realloc(ptr, newsize)"]
-    Null{"ptr == NULL?"}
-    Malloc["malloc(newsize)"]
-    Zero{"newsize == 0?"}
-    Free["free(ptr), return NULL"]
-    Arena{"arena?"}
-    Same{"new == old?"}
-    Keep["return ptr"]
-    Shrink{"new < old?"}
-    ShrinkIP["shrink in place<br>release tail"]
-    Grow{"gap after block<br>>= extra AND<br>region size ok?"}
-    GrowIP["grow in place<br>claim tail"]
-    Move["alloc new + copy + free old"]
-    R --> Null
-    Null -->|yes| Malloc
-    Null -->|no| Zero
-    Zero -->|yes| Free
-    Zero -->|no| Arena
-    Arena -->|DRAM| Same
-    Same -->|yes| Keep
-    Same -->|no| Shrink
-    Shrink -->|yes| ShrinkIP
-    Shrink -->|no| Grow
-    Grow -->|yes| GrowIP
-    Grow -->|no| Move
-```
+![Reallocation (realloc) — flowchart](images/reallocation-realloc.svg)
 
 ### In-place rules (DRAM)
 
@@ -409,39 +298,7 @@ memory. The bitmap is DRAM-only; IRAM always uses a descriptor scan.
 
 `mxr_init()` runs once (directly or via the wrapped `heap_caps_init`).
 
-```mermaid
-flowchart TD
-    I["mxr_init"]
-    Bounds["DRAM = _bss_end ..<br>0x40000000<br>align to 4 bytes"]
-    SizeOk{"units <= 32768?"}
-    Abort["log error, abort init"]
-    Bitmap{"bitmap mode?"}
-    Carve["carve bitmap from arena<br>tail<br>shrink usable units"]
-    Clear["clear descriptor table +<br>stats"]
-    Iram{"CONFIG_MXR_USE_IRAM?"}
-    IramInit["mxr_init_iram()<br>_iram_end .. IRAM top"]
-    Regions["mxr_init_regions_kconfig()"]
-    Ok{"regions ok?"}
-    Stats["compute totals + largest<br>free"]
-    Single["fallback: single flat region"]
-    Ready["s_initialized = true"]
-    I --> Bounds
-    Bounds --> SizeOk
-    SizeOk -->|no| Abort
-    SizeOk -->|yes| Bitmap
-    Bitmap -->|yes| Carve
-    Bitmap -->|no| Clear
-    Carve --> Clear
-    Clear --> Iram
-    Iram -->|yes| IramInit
-    Iram -->|no| Regions
-    IramInit --> Regions
-    Regions --> Ok
-    Ok -->|yes| Stats
-    Ok -->|no| Single
-    Single --> Stats
-    Stats --> Ready
-```
+![Initialization — flowchart](images/initialization.svg)
 
 Key points:
 
