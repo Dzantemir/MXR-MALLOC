@@ -15,7 +15,6 @@
 void *malloc(size_t n)
 {
     void *return_addr = (void *)__builtin_return_address(0);
-
     return _heap_caps_malloc(
         n,
         MALLOC_CAP_32BIT,
@@ -26,7 +25,6 @@ void *malloc(size_t n)
 void free(void *ptr)
 {
     void *return_addr = (void *)__builtin_return_address(0);
-
     _heap_caps_free(
         ptr,
         (const char *)return_addr,
@@ -36,7 +34,6 @@ void free(void *ptr)
 void *calloc(size_t c, size_t s)
 {
     void *return_addr = (void *)__builtin_return_address(0);
-
     return _heap_caps_calloc(
         c,
         s,
@@ -48,7 +45,6 @@ void *calloc(size_t c, size_t s)
 void *realloc(void *old_ptr, size_t n)
 {
     void *return_addr = (void *)__builtin_return_address(0);
-
     return _heap_caps_realloc(
         old_ptr,
         n,
@@ -60,7 +56,6 @@ void *realloc(void *old_ptr, size_t n)
 void *zalloc(size_t n)
 {
     void *return_addr = (void *)__builtin_return_address(0);
-
     return _heap_caps_zalloc(
         n,
         MALLOC_CAP_32BIT,

@@ -10,10 +10,20 @@
 #define IRAM_ATTR
 #endif
 
+/*
+ * Placement attributes for the non-wrap compatibility layer.
+ * Mirrors mxr_heap_wrap.c semantics.
+ */
 #ifdef CONFIG_MXR_IRAM_HOT_PATH_DISABLED
 #define MXR_COMPAT_IRAM
+#define MXR_COMPAT_ALLOC_ATTR
 #else
 #define MXR_COMPAT_IRAM IRAM_ATTR
+#ifdef CONFIG_MXR_IRAM_PATH_ALLOC_FAMILY
+#define MXR_COMPAT_ALLOC_ATTR IRAM_ATTR
+#else
+#define MXR_COMPAT_ALLOC_ATTR
+#endif
 #endif
 
 void heap_caps_init(void)
@@ -29,7 +39,6 @@ void *MXR_COMPAT_IRAM _heap_caps_malloc(
 {
     (void)file;
     (void)line;
-
     return mxr_malloc_caps(size, caps);
 }
 
@@ -40,11 +49,10 @@ void MXR_COMPAT_IRAM _heap_caps_free(
 {
     (void)file;
     (void)line;
-
     mxr_free(ptr);
 }
 
-void *_heap_caps_calloc(
+void *MXR_COMPAT_ALLOC_ATTR _heap_caps_calloc(
     size_t count,
     size_t size,
     uint32_t caps,
@@ -53,11 +61,10 @@ void *_heap_caps_calloc(
 {
     (void)file;
     (void)line;
-
     return mxr_calloc_caps(count, size, caps);
 }
 
-void *_heap_caps_realloc(
+void *MXR_COMPAT_ALLOC_ATTR _heap_caps_realloc(
     void *mem,
     size_t newsize,
     uint32_t caps,
@@ -66,11 +73,10 @@ void *_heap_caps_realloc(
 {
     (void)file;
     (void)line;
-
     return mxr_realloc_caps(mem, newsize, caps);
 }
 
-void *_heap_caps_zalloc(
+void *MXR_COMPAT_ALLOC_ATTR _heap_caps_zalloc(
     size_t size,
     uint32_t caps,
     const char *file,
@@ -78,7 +84,6 @@ void *_heap_caps_zalloc(
 {
     (void)file;
     (void)line;
-
     return mxr_zalloc_caps(size, caps);
 }
 
@@ -92,7 +97,10 @@ size_t heap_caps_get_minimum_free_size(uint32_t caps)
     return mxr_get_min_free_size_caps(caps);
 }
 
-size_t MXR_COMPAT_IRAM heap_caps_get_dram_free_size(void)
+/*
+ * Not IRAM: mxr_get_free_size_caps() lives in flash (O(n) scans).
+ */
+size_t heap_caps_get_dram_free_size(void)
 {
     return mxr_get_free_size_caps(
         MALLOC_CAP_8BIT | MALLOC_CAP_32BIT | MALLOC_CAP_DMA);

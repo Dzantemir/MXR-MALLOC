@@ -13,6 +13,7 @@ choice
 
         Every preset drives MXR_REGIONS / MXR_REGION_SIZES /
         MXR_REGION_PERCENTS through the same Kconfig parser.
+
         The last region is always unlimited and absorbs leftover memory.
 
     config MXR_PRESET_CUSTOM
@@ -44,7 +45,6 @@ choice
 
     config MXR_PRESET_LOGGING
         bool "Logging / Debug - heavy ESP_LOG (3 regions)"
-
 endchoice
 
 # ============================================================
@@ -66,6 +66,33 @@ config MXR_IRAM_HOT_PATH_DISABLED
         By default MxR places core malloc/free hot path in IRAM.
         Enable this if IRAM is insufficient.
 
+choice
+    prompt "IRAM hot path scope"
+    depends on !MXR_IRAM_HOT_PATH_DISABLED
+    default MXR_IRAM_PATH_CORE
+    help
+        Select which allocator functions are placed in IRAM.
+
+        IRAM functions stay callable while flash cache is disabled
+        (during flash write/erase). Flash functions crash there.
+
+        Core:
+            malloc / free only. Smallest IRAM footprint.
+            calloc / zalloc / realloc stay in flash.
+
+        Allocation family:
+            malloc / free / calloc / zalloc / realloc in IRAM.
+            Noticeably larger IRAM footprint (realloc is big).
+            Use only if allocations can run from ISRs/callbacks
+            during flash operations. Check `idf.py size` after enabling.
+
+    config MXR_IRAM_PATH_CORE
+        bool "Core (malloc/free only)"
+
+    config MXR_IRAM_PATH_ALLOC_FAMILY
+        bool "Allocation family (malloc/free/calloc/zalloc/realloc)"
+endchoice
+
 # ============================================================
 #  IRAM heap
 # ============================================================
@@ -76,9 +103,11 @@ config MXR_USE_IRAM
     default n
     help
         Enable IRAM heap region.
+
         MALLOC_CAP_EXEC allocations go to IRAM.
         Ordinary 32BIT allocations use DRAM first.
         If DRAM cannot allocate, IRAM is used as fallback.
+
         DMA and 8BIT allocations never go to IRAM.
 
 config MXR_IRAM_RESERVE_BYTES
@@ -88,8 +117,10 @@ config MXR_IRAM_RESERVE_BYTES
     default 2048
     help
         Reserve this many IRAM bytes for EXEC allocations.
+
         Non-EXEC 32BIT fallback allocations will not consume
         IRAM unless enough free space remains.
+
         Set 0 to disable reserve.
 
 config MXR_IRAM_FALLBACK_MAX_BYTES
@@ -100,6 +131,7 @@ config MXR_IRAM_FALLBACK_MAX_BYTES
     help
         Maximum non-EXEC block size allowed to fallback into IRAM.
         0 means unlimited.
+
         EXEC allocations are not limited by this option.
 
 # ============================================================
@@ -118,8 +150,29 @@ config MXR_CROSS_REGION_FALLBACK
 
       Disable (default): allocation fails if its own region and
       IRAM are exhausted.
+
       Enable: allocation may land in a non-matching region
       before returning NULL.
+
+config MXR_CROSS_REGION_CHECK_LARGEST
+    bool "Check largest free block before cross-region fallback"
+    depends on MXR_CROSS_REGION_FALLBACK
+    default n
+    help
+        Before selecting a cross-region fallback candidate, check that
+        the region has a contiguous free block large enough.
+
+        This can avoid useless allocation attempts in fragmented regions,
+        but adds extra scanning overhead in the fallback path.
+
+        Default n:
+            Faster cross-region fallback.
+            Allocator may try fragmented regions and then continue
+            to the next region.
+
+        Enable y:
+            Allocator skips regions that do not have a contiguous
+            free block large enough.
 
 config MXR_CROSS_REGION_AFTER_IRAM
     bool "Cross-region only after IRAM is exhausted"
@@ -131,25 +184,24 @@ config MXR_CROSS_REGION_AFTER_IRAM
 
       If y (recommended):
         own region -> IRAM -> cross-region
+
       IRAM is the primary fallback ("junk drawer"), cross-region
       is the absolute last resort. This keeps DRAM regions
       clean as long as possible.
 
       If n:
         own region -> cross-region -> IRAM
+
       Cross-region is tried before IRAM. Use this if you want
       to keep IRAM completely untouched for EXEC allocations.
 
 # ============================================================
 #  Region configuration (preset-driven)
-#
-#  Editable only in Custom mode. For every other preset the
-#  values come from the "default ... if MXR_PRESET_*" lines.
 # ============================================================
 
 config MXR_REGIONS
     int "Number of heap regions" if MXR_PRESET_CUSTOM
-    range 2 16
+    range 1 16
     default 3 if MXR_PRESET_CUSTOM
     default 3 if MXR_PRESET_BALANCED
     default 2 if MXR_PRESET_MINIMAL
@@ -165,8 +217,13 @@ config MXR_REGIONS
         The last region is always unlimited and receives
         remaining memory.
 
+        If set to 1, a single flat DRAM region is used.
+        In this mode MXR_REGION_SIZES and MXR_REGION_PERCENTS
+        are ignored.
+
 config MXR_REGION_SIZES
     string "Lower block size boundaries for regions, bytes" if MXR_PRESET_CUSTOM
+    depends on MXR_REGIONS > 1
     default "4,132,1024"      if MXR_PRESET_CUSTOM
     default "4,132,1024"      if MXR_PRESET_BALANCED
     default "4,256"           if MXR_PRESET_MINIMAL
@@ -184,6 +241,7 @@ config MXR_REGION_SIZES
 
 config MXR_REGION_PERCENTS
     string "Memory weights for regions" if MXR_PRESET_CUSTOM
+    depends on MXR_REGIONS > 1
     default "15,45,20"    if MXR_PRESET_CUSTOM
     default "15,45,0"     if MXR_PRESET_BALANCED
     default "30,0"        if MXR_PRESET_MINIMAL
@@ -198,6 +256,7 @@ config MXR_REGION_PERCENTS
         Comma-separated percent weights.
         Count must be equal to MXR_REGIONS.
         Sum must be <= 100.
+
         If the last value is 0, the last region receives
         all remaining memory.
 
@@ -214,7 +273,6 @@ choice
 
     config MXR_SEARCH_BITMAP
         bool "Bitmap accelerated search (carved from arena, DRAM only)"
-
 endchoice
 
 # ============================================================

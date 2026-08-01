@@ -12,12 +12,27 @@
 #define IRAM_ATTR
 #endif
 
+/*
+ * Placement attributes.
+ *
+ * MXR_IRAM_ATTR        : core malloc/free hot path.
+ * MXR_IRAM_INLINE_ATTR : small inline helpers used by the hot path.
+ * MXR_IRAM_ALLOC_ATTR  : allocation family (calloc/zalloc/realloc) and
+ *                        their word helpers. Only placed in IRAM when
+ *                        CONFIG_MXR_IRAM_PATH_ALLOC_FAMILY is enabled.
+ */
 #ifdef CONFIG_MXR_IRAM_HOT_PATH_DISABLED
 #define MXR_IRAM_ATTR
-#define MXR_INLINE_ATTR
+#define MXR_IRAM_INLINE_ATTR
+#define MXR_IRAM_ALLOC_ATTR
 #else
 #define MXR_IRAM_ATTR IRAM_ATTR
-#define MXR_INLINE_ATTR IRAM_ATTR
+#define MXR_IRAM_INLINE_ATTR IRAM_ATTR
+#ifdef CONFIG_MXR_IRAM_PATH_ALLOC_FAMILY
+#define MXR_IRAM_ALLOC_ATTR IRAM_ATTR
+#else
+#define MXR_IRAM_ALLOC_ATTR
+#endif
 #endif
 
 #include "mxr_malloc.h"
@@ -50,12 +65,12 @@ static const char *TAG = "mxr_malloc";
 extern void vPortETSIntrLock(void);
 extern void vPortETSIntrUnlock(void);
 
-static inline void MXR_INLINE_ATTR mxr_lock(void)
+static inline void MXR_IRAM_INLINE_ATTR mxr_lock(void)
 {
     vPortETSIntrLock();
 }
 
-static inline void MXR_INLINE_ATTR mxr_unlock(void)
+static inline void MXR_IRAM_INLINE_ATTR mxr_unlock(void)
 {
     vPortETSIntrUnlock();
 }
@@ -65,11 +80,9 @@ static inline void MXR_INLINE_ATTR mxr_unlock(void)
  */
 static mxr_desc_t s_desc[CONFIG_MXR_MAX_DESC];
 static uint16_t s_desc_count;
-
 static uint8_t s_region_count;
 static uint8_t *s_arena_base;
 static uint16_t s_arena_total_units;
-
 static bool s_initialized;
 static mxr_status_t s_stats;
 
@@ -93,7 +106,7 @@ static uint32_t s_iram_fallback_allocs;
 
 static mxr_region_t s_region[MXR_ACTIVE_TOTAL_REGIONS];
 
-static inline void mxr_memset_words(void *ptr, uint16_t units)
+static inline void MXR_IRAM_ALLOC_ATTR mxr_memset_words(void *ptr, uint16_t units)
 {
     uint32_t *p = (uint32_t *)ptr;
     for (uint16_t i = 0; i < units; i++)
@@ -102,7 +115,7 @@ static inline void mxr_memset_words(void *ptr, uint16_t units)
     }
 }
 
-static inline void mxr_memcpy_words(void *dst, const void *src, uint16_t units)
+static inline void MXR_IRAM_ALLOC_ATTR mxr_memcpy_words(void *dst, const void *src, uint16_t units)
 {
     uint32_t *d = (uint32_t *)dst;
     const uint32_t *s = (const uint32_t *)src;
@@ -115,7 +128,9 @@ static inline void mxr_memcpy_words(void *dst, const void *src, uint16_t units)
 /* ================================================================
  *  Bitmap search (DRAM only)
  * ================================================================ */
+
 #ifdef CONFIG_MXR_SEARCH_BITMAP
+
 /*
  * Bitmap is carved from the end of the arena at init time.
  * Size is proportional to actual arena, not max 128 KB.
@@ -127,7 +142,7 @@ static inline void mxr_memcpy_words(void *dst, const void *src, uint16_t units)
 static uint32_t *s_bitmap;
 static uint16_t s_bitmap_units;
 
-static inline uint32_t MXR_INLINE_ATTR mxr_mask_low_bits(uint16_t bits)
+static inline uint32_t MXR_IRAM_INLINE_ATTR mxr_mask_low_bits(uint16_t bits)
 {
     if (bits >= 32)
     {
@@ -167,7 +182,6 @@ static void MXR_IRAM_ATTR mxr_bitmap_set_range(uint16_t off_units, uint16_t len_
         {
             chunk = remain;
         }
-
         uint32_t mask = mxr_mask_low_bits(chunk) << bit;
         s_bitmap[word_index] |= mask;
         off_units += chunk;
@@ -201,7 +215,6 @@ static void MXR_IRAM_ATTR mxr_bitmap_clear_range(uint16_t off_units, uint16_t le
         {
             chunk = remain;
         }
-
         uint32_t mask = mxr_mask_low_bits(chunk) << bit;
         s_bitmap[word_index] &= ~mask;
         off_units += chunk;
@@ -230,19 +243,15 @@ static int MXR_IRAM_ATTR mxr_bitmap_next_set(uint16_t start, uint16_t end_exclus
         {
             high = 32;
         }
-
         uint32_t mask = ~mxr_mask_low_bits(bit);
         mask &= mxr_mask_low_bits(high);
-
         uint32_t word = s_bitmap[word_index] & mask;
         if (word)
         {
             return (int)(word_start + __builtin_ctz(word));
         }
-
         pos = (uint16_t)(word_start + 32);
     }
-
     return -1;
 }
 
@@ -268,19 +277,15 @@ static int MXR_IRAM_ATTR mxr_bitmap_next_clear(uint16_t start, uint16_t end_excl
         {
             high = 32;
         }
-
         uint32_t mask = ~mxr_mask_low_bits(bit);
         mask &= mxr_mask_low_bits(high);
-
         uint32_t word = (~s_bitmap[word_index]) & mask;
         if (word)
         {
             return (int)(word_start + __builtin_ctz(word));
         }
-
         pos = (uint16_t)(word_start + 32);
     }
-
     return -1;
 }
 
@@ -306,22 +311,18 @@ static bool MXR_IRAM_ATTR mxr_bitmap_find_from_start(
     {
         uint16_t window_end = (uint16_t)(cur + units);
         int allocated = mxr_bitmap_next_set(cur, window_end);
-
         if (allocated < 0)
         {
             *out_off_units = cur;
             return true;
         }
-
         int next_free = mxr_bitmap_next_clear((uint16_t)(allocated + 1), region_end);
         if (next_free < 0)
         {
             break;
         }
-
         cur = (uint16_t)next_free;
     }
-
     return false;
 }
 
@@ -347,9 +348,7 @@ static uint16_t MXR_IRAM_ATTR mxr_bitmap_largest_free_run(int region_index)
          * Find next allocated bit.
          */
         int alloc = mxr_bitmap_next_set(run_start, region_end);
-
         uint16_t run_end;
-
         if (alloc < 0)
         {
             run_end = region_end;
@@ -360,7 +359,6 @@ static uint16_t MXR_IRAM_ATTR mxr_bitmap_largest_free_run(int region_index)
         }
 
         uint16_t gap = (uint16_t)(run_end - run_start);
-
         if (gap > largest)
         {
             largest = gap;
@@ -375,45 +373,44 @@ static uint16_t MXR_IRAM_ATTR mxr_bitmap_largest_free_run(int region_index)
          * Skip to next free bit after allocated.
          */
         int next_free = mxr_bitmap_next_clear((uint16_t)(alloc + 1), region_end);
-
         if (next_free < 0)
         {
             break;
         }
-
         run_start = (uint16_t)next_free;
     }
 
     return largest;
 }
+
 #endif /* CONFIG_MXR_SEARCH_BITMAP */
 
 /* ================================================================
  *  Basic conversions
  * ================================================================ */
 
-static inline uint16_t MXR_INLINE_ATTR mxr_bytes_to_units(size_t bytes)
+static inline uint16_t MXR_IRAM_INLINE_ATTR mxr_bytes_to_units(size_t bytes)
 {
     return (uint16_t)((bytes + MXR_UNIT_SIZE - 1) / MXR_UNIT_SIZE);
 }
 
-static inline void *MXR_INLINE_ATTR mxr_units_to_ptr(uint16_t units)
+static inline void *MXR_IRAM_INLINE_ATTR mxr_units_to_ptr(uint16_t units)
 {
     return (void *)(s_arena_base + (size_t)units * MXR_UNIT_SIZE);
 }
 
-static inline uint16_t MXR_INLINE_ATTR mxr_ptr_to_units(const void *ptr)
+static inline uint16_t MXR_IRAM_INLINE_ATTR mxr_ptr_to_units(const void *ptr)
 {
     return (uint16_t)(((const uint8_t *)ptr - s_arena_base) / MXR_UNIT_SIZE);
 }
 
 #ifdef CONFIG_MXR_USE_IRAM
-static inline void *MXR_INLINE_ATTR mxr_iram_units_to_ptr(uint16_t units)
+static inline void *MXR_IRAM_INLINE_ATTR mxr_iram_units_to_ptr(uint16_t units)
 {
     return (void *)(s_iram_base + (size_t)units * MXR_UNIT_SIZE);
 }
 
-static inline uint16_t MXR_INLINE_ATTR mxr_iram_ptr_to_units(const void *ptr)
+static inline uint16_t MXR_IRAM_INLINE_ATTR mxr_iram_ptr_to_units(const void *ptr)
 {
     return (uint16_t)(((const uint8_t *)ptr - s_iram_base) / MXR_UNIT_SIZE);
 }
@@ -491,12 +488,10 @@ static int MXR_IRAM_ATTR mxr_desc_find_key(uint16_t key)
 {
     int left = 0;
     int right = (int)s_desc_count;
-
     while (left < right)
     {
         int mid = (left + right) / 2;
         uint16_t cur = s_desc[mid].off_flags;
-
         if (cur == key)
         {
             return mid;
@@ -510,15 +505,14 @@ static int MXR_IRAM_ATTR mxr_desc_find_key(uint16_t key)
             right = mid;
         }
     }
-
     return -1;
 }
 
+#ifdef CONFIG_MXR_USE_IRAM
 static int MXR_IRAM_ATTR mxr_desc_first_iram(void)
 {
     int left = 0;
     int right = (int)s_desc_count;
-
     while (left < right)
     {
         int mid = (left + right) / 2;
@@ -531,9 +525,9 @@ static int MXR_IRAM_ATTR mxr_desc_first_iram(void)
             left = mid + 1;
         }
     }
-
     return left;
 }
+#endif
 
 static bool MXR_IRAM_ATTR mxr_desc_insert_ex(
     uint16_t off_units,
@@ -620,7 +614,6 @@ static bool MXR_IRAM_ATTR mxr_desc_insert_ex(
         uint16_t prev_off = mxr_desc_off(&s_desc[pos - 1]);
         uint16_t prev_len = mxr_desc_len(&s_desc[pos - 1]);
         uint32_t prev_end = (uint32_t)prev_off + prev_len;
-
         if (prev_end > off_units)
         {
             return false;
@@ -631,7 +624,6 @@ static bool MXR_IRAM_ATTR mxr_desc_insert_ex(
     {
         uint16_t next_off = mxr_desc_off(&s_desc[pos]);
         uint32_t new_end = (uint32_t)off_units + len_units;
-
         if (new_end > next_off)
         {
             return false;
@@ -652,7 +644,6 @@ static bool MXR_IRAM_ATTR mxr_desc_insert_ex(
 
     s_desc_count++;
     s_stats.active_allocs = s_desc_count;
-
     if (s_stats.active_allocs > s_stats.max_active_allocs)
     {
         s_stats.max_active_allocs = s_stats.active_allocs;
@@ -667,22 +658,19 @@ static void MXR_IRAM_ATTR mxr_desc_remove(int index)
     {
         return;
     }
-
     if (index < (int)s_desc_count - 1)
     {
         mxr_desc_shift_left(index);
     }
-
     s_desc_count--;
     mxr_desc_clear(&s_desc[s_desc_count]);
     s_stats.active_allocs = s_desc_count;
 }
 
-static inline void MXR_INLINE_ATTR mxr_desc_set_len(mxr_desc_t *d, uint16_t len_units)
+static inline void MXR_IRAM_INLINE_ATTR mxr_desc_set_len(mxr_desc_t *d, uint16_t len_units)
 {
     uint16_t flags = mxr_desc_len_flags(d);
     uint16_t stored_len;
-
     if (len_units == 0)
     {
         stored_len = 0;
@@ -691,7 +679,6 @@ static inline void MXR_INLINE_ATTR mxr_desc_set_len(mxr_desc_t *d, uint16_t len_
     {
         stored_len = (uint16_t)(len_units - 1u);
     }
-
     d->len_flags = (uint16_t)((stored_len & MXR_LEN_MASK) | flags);
 }
 
@@ -705,13 +692,11 @@ static int MXR_IRAM_ATTR mxr_region_by_off(uint16_t off_units)
     {
         uint16_t start = s_region[i].start_unit;
         uint16_t end = (uint16_t)(start + s_region[i].total_units);
-
         if (off_units >= start && off_units < end)
         {
             return i;
         }
     }
-
     return -1;
 }
 
@@ -736,7 +721,6 @@ static int MXR_IRAM_ATTR mxr_region_for_size(uint16_t len_units, uint32_t caps)
         }
         return i;
     }
-
     return -1;
 }
 
@@ -841,6 +825,7 @@ static uint16_t MXR_IRAM_ATTR mxr_region_largest_free_units(uint8_t region_index
     return largest;
 #endif
 }
+
 static void MXR_IRAM_ATTR mxr_region_allocated(int region_index, uint16_t units)
 {
     if (region_index >= 0 && region_index < s_region_count)
@@ -861,7 +846,6 @@ static void MXR_IRAM_ATTR mxr_region_allocated(int region_index, uint16_t units)
     }
 
     size_t bytes = (size_t)units * MXR_UNIT_SIZE;
-
     if (s_stats.free_bytes >= bytes)
     {
         s_stats.free_bytes -= bytes;
@@ -883,17 +867,14 @@ static void MXR_IRAM_ATTR mxr_region_released(int region_index, uint16_t units)
     {
         uint32_t new_free =
             (uint32_t)s_region[region_index].free_units + units;
-
         if (new_free > s_region[region_index].total_units)
         {
             new_free = s_region[region_index].total_units;
         }
-
         s_region[region_index].free_units = (uint16_t)new_free;
     }
 
     s_stats.free_bytes += (size_t)units * MXR_UNIT_SIZE;
-
     if (s_stats.free_bytes > s_stats.total_bytes)
     {
         s_stats.free_bytes = s_stats.total_bytes;
@@ -905,6 +886,7 @@ static void MXR_IRAM_ATTR mxr_region_released(int region_index, uint16_t units)
  * ================================================================ */
 
 #ifndef CONFIG_MXR_SEARCH_BITMAP
+
 static bool MXR_IRAM_ATTR mxr_find_free_from_start(
     int region_index,
     uint16_t units,
@@ -968,6 +950,7 @@ static bool MXR_IRAM_ATTR mxr_find_free_from_start(
 
     return false;
 }
+
 #endif /* !CONFIG_MXR_SEARCH_BITMAP */
 
 static bool MXR_IRAM_ATTR mxr_try_alloc_region(
@@ -1018,7 +1001,6 @@ static void MXR_IRAM_ATTR mxr_iram_allocated(uint16_t units)
     }
 
     size_t bytes = (size_t)units * MXR_UNIT_SIZE;
-
     if (s_stats.free_bytes >= bytes)
     {
         s_stats.free_bytes -= bytes;
@@ -1037,16 +1019,13 @@ static void MXR_IRAM_ATTR mxr_iram_allocated(uint16_t units)
 static void MXR_IRAM_ATTR mxr_iram_released(uint16_t units)
 {
     uint32_t new_free = (uint32_t)s_iram_free_units + units;
-
     if (new_free > s_iram_total_units)
     {
         new_free = s_iram_total_units;
     }
-
     s_iram_free_units = (uint16_t)new_free;
 
     s_stats.free_bytes += (size_t)units * MXR_UNIT_SIZE;
-
     if (s_stats.free_bytes > s_stats.total_bytes)
     {
         s_stats.free_bytes = s_stats.total_bytes;
@@ -1072,7 +1051,6 @@ static bool MXR_IRAM_ATTR mxr_iram_find_free_from_start(
 
     uint16_t cur = 0;
     uint16_t end = s_iram_total_units;
-
     int first = mxr_desc_first_iram();
 
     for (int i = first; i < (int)s_desc_count; i++)
@@ -1194,7 +1172,6 @@ static uint16_t MXR_IRAM_ATTR mxr_iram_largest_free_units(void)
     uint16_t cur = 0;
     uint16_t end = s_iram_total_units;
     uint16_t largest = 0;
-
     int first = mxr_desc_first_iram();
 
     for (int i = first; i < (int)s_desc_count; i++)
@@ -1246,23 +1223,31 @@ static bool MXR_IRAM_ATTR mxr_caps_allow_iram_fallback(uint32_t caps)
     {
         return false;
     }
-
     if (caps & MALLOC_CAP_EXEC)
     {
         return false;
     }
-
     if (caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM))
     {
         return false;
     }
-
     if ((caps & MALLOC_CAP_32BIT) || caps == 0)
     {
         return true;
     }
-
     return false;
+}
+
+static inline uint16_t MXR_IRAM_INLINE_ATTR mxr_iram_reserve_units(void)
+{
+    uint32_t reserve_bytes = CONFIG_MXR_IRAM_RESERVE_BYTES;
+    uint32_t reserve_units =
+        (reserve_bytes + MXR_UNIT_SIZE - 1) / MXR_UNIT_SIZE;
+    if (reserve_units > MXR_MAX_LEN_UNITS)
+    {
+        reserve_units = MXR_MAX_LEN_UNITS;
+    }
+    return (uint16_t)reserve_units;
 }
 
 static bool MXR_IRAM_ATTR mxr_iram_can_fallback(uint16_t units)
@@ -1276,17 +1261,7 @@ static bool MXR_IRAM_ATTR mxr_iram_can_fallback(uint16_t units)
         return false;
     }
 
-    uint32_t reserve_bytes = CONFIG_MXR_IRAM_RESERVE_BYTES;
-    uint32_t reserve_units =
-        (reserve_bytes + MXR_UNIT_SIZE - 1) / MXR_UNIT_SIZE;
-
-    if (reserve_units > MXR_MAX_LEN_UNITS)
-    {
-        reserve_units = MXR_MAX_LEN_UNITS;
-    }
-
-    uint32_t need = (uint32_t)units + reserve_units;
-
+    uint32_t need = (uint32_t)units + mxr_iram_reserve_units();
     if (s_iram_free_units < need)
     {
         return false;
@@ -1297,7 +1272,6 @@ static bool MXR_IRAM_ATTR mxr_iram_can_fallback(uint16_t units)
         uint32_t max_units =
             (CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES + MXR_UNIT_SIZE - 1) /
             MXR_UNIT_SIZE;
-
         if (units > max_units)
         {
             return false;
@@ -1307,18 +1281,45 @@ static bool MXR_IRAM_ATTR mxr_iram_can_fallback(uint16_t units)
     return true;
 }
 
-static inline uint16_t MXR_INLINE_ATTR mxr_iram_reserve_units(void)
+/*
+ * Check whether a non-EXEC IRAM fallback block may grow in place.
+ *
+ * For EXEC blocks reserve is not applied.
+ * For non-EXEC fallback blocks we must keep CONFIG_MXR_IRAM_RESERVE_BYTES
+ * free for future EXEC allocations.
+ */
+static bool MXR_IRAM_ATTR mxr_iram_can_grow_fallback(
+    uint16_t old_units,
+    uint16_t new_units)
 {
-    uint32_t reserve_bytes = CONFIG_MXR_IRAM_RESERVE_BYTES;
-    uint32_t reserve_units =
-        (reserve_bytes + MXR_UNIT_SIZE - 1) / MXR_UNIT_SIZE;
-
-    if (reserve_units > MXR_MAX_LEN_UNITS)
+    if (!s_iram_enabled)
     {
-        reserve_units = MXR_MAX_LEN_UNITS;
+        return false;
+    }
+    if (new_units <= old_units)
+    {
+        return true;
     }
 
-    return (uint16_t)reserve_units;
+    uint16_t extra = (uint16_t)(new_units - old_units);
+    uint32_t reserve_units = mxr_iram_reserve_units();
+    if (s_iram_free_units < (uint32_t)extra + reserve_units)
+    {
+        return false;
+    }
+
+    if (CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES != 0)
+    {
+        uint32_t max_units =
+            (CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES + MXR_UNIT_SIZE - 1) /
+            MXR_UNIT_SIZE;
+        if (new_units > max_units)
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static void mxr_init_iram(void)
@@ -1359,7 +1360,6 @@ static void mxr_init_iram(void)
     }
 
     size_t units = bytes / MXR_UNIT_SIZE;
-
     if (units == 0 || units > MXR_MAX_LEN_UNITS)
     {
         return;
@@ -1399,71 +1399,41 @@ static void *MXR_IRAM_ATTR mxr_try_iram_fallback(uint16_t units, uint32_t caps)
     {
         return NULL;
     }
+
     uint16_t off_units = 0;
     if (!mxr_iram_find_free_from_end(units, &off_units))
     {
         return NULL;
     }
+
     if (!mxr_desc_insert_ex(off_units, units, true, 0))
     {
         return NULL;
     }
+
     mxr_iram_allocated(units);
     s_iram_fallback_allocs++;
     s_stats.iram_fallback_allocs++;
+
     return mxr_iram_units_to_ptr(off_units);
 }
 #endif /* CONFIG_MXR_USE_IRAM */
 
 #ifdef CONFIG_MXR_CROSS_REGION_FALLBACK
-/*
- * Find the best DRAM region for cross-region fallback.
- *
- * Strategy: pick the region with the smallest min_units that
- * has enough free space. This minimizes fragmentation of
- * large-block regions by small allocations.
- *
- * skip = region index to skip (the block's "own" region),
- *        or -1 to skip nothing.
- */
-static int MXR_IRAM_ATTR mxr_find_cross_region(
-    uint16_t units,
-    uint32_t caps,
-    int skip)
-{
-    int best = -1;
-    uint16_t best_min = 0xFFFF;
-
-    for (uint8_t i = 0; i < s_region_count; i++)
-    {
-        if ((int)i == skip)
-        {
-            continue;
-        }
-        if (!mxr_region_caps_ok((int)i, caps))
-        {
-            continue;
-        }
-        if (s_region[i].free_units < units)
-        {
-            continue;
-        }
-
-        /*
-         * Prefer the region whose size class is closest to
-         * the requested block size (smallest min_units).
-         */
-        if (s_region[i].min_units < best_min)
-        {
-            best_min = s_region[i].min_units;
-            best = (int)i;
-        }
-    }
-    return best;
-}
 
 /*
  * Try cross-region DRAM fallback.
+ *
+ * Strategy:
+ *   1. Skip the block's own region.
+ *   2. Pick the region with the smallest min_units
+ *      that has enough total free space.
+ *   3. Try to allocate there.
+ *   4. If allocation fails because of fragmentation,
+ *      try the next best region.
+ *
+ * This is a LAST RESORT mechanism.
+ *
  * Returns pointer on success, NULL on failure.
  */
 static void *MXR_IRAM_ATTR mxr_try_cross_region(
@@ -1471,32 +1441,97 @@ static void *MXR_IRAM_ATTR mxr_try_cross_region(
     uint32_t caps,
     int skip_region)
 {
-    int cross = mxr_find_cross_region(units, caps, skip_region);
-    if (cross < 0)
+    uint32_t tried = 0;
+
+    if (skip_region >= 0 && skip_region < (int)s_region_count)
     {
-        return NULL;
+        tried |= (1u << skip_region);
     }
 
-    uint16_t off_units = 0;
-    if (!mxr_try_alloc_region(cross, units, &off_units))
+    for (;;)
     {
-        return NULL;
-    }
-    if (!mxr_desc_insert_ex(off_units, units, false, 0))
-    {
-        return NULL;
-    }
+        int best = -1;
+        uint16_t best_min = 0xFFFF;
 
-#ifdef CONFIG_MXR_SEARCH_BITMAP
-    mxr_bitmap_set_range(off_units, units);
+        for (uint8_t i = 0; i < s_region_count; i++)
+        {
+            if (tried & (1u << i))
+            {
+                continue;
+            }
+            if (!mxr_region_caps_ok((int)i, caps))
+            {
+                continue;
+            }
+            if (s_region[i].free_units < units)
+            {
+                continue;
+            }
+
+#ifdef CONFIG_MXR_CROSS_REGION_CHECK_LARGEST
+            if (mxr_region_largest_free_units(i) < units)
+            {
+                s_stats.cross_region_skip_fragmented++;
+                tried |= (1u << i);
+                continue;
+            }
 #endif
 
-    s_region[cross].alloc_count++;
-    mxr_region_allocated(cross, units);
-    s_stats.cross_region_allocs++;
-    return mxr_units_to_ptr(off_units);
+            /*
+             * Prefer the region whose size class is closest
+             * to the requested block size.
+             */
+            if (s_region[i].min_units < best_min)
+            {
+                best_min = s_region[i].min_units;
+                best = (int)i;
+            }
+        }
+
+        if (best < 0)
+        {
+            return NULL;
+        }
+
+        tried |= (1u << best);
+
+        uint16_t off_units = 0;
+        if (!mxr_try_alloc_region(best, units, &off_units))
+        {
+            /*
+             * This region has enough total free memory,
+             * but no contiguous free block.
+             *
+             * Try the next candidate region.
+             */
+            continue;
+        }
+
+        if (!mxr_desc_insert_ex(off_units, units, false, 0))
+        {
+            /*
+             * Descriptor table full or internal overlap error.
+             *
+             * If the table is full, trying other regions will
+             * not help because every allocation needs a descriptor.
+             */
+            return NULL;
+        }
+
+#ifdef CONFIG_MXR_SEARCH_BITMAP
+        mxr_bitmap_set_range(off_units, units);
+#endif
+
+        s_region[best].alloc_count++;
+        mxr_region_allocated(best, units);
+        s_stats.cross_region_allocs++;
+
+        return mxr_units_to_ptr(off_units);
+    }
 }
+
 #endif /* CONFIG_MXR_CROSS_REGION_FALLBACK */
+
 /* ================================================================
  *  Locked allocation
  * ================================================================ */
@@ -1520,12 +1555,10 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
     }
 
     uint16_t units = mxr_bytes_to_units(size);
-
     if (units == 0)
     {
         units = 1;
     }
-
     if (units > MXR_MAX_LEN_UNITS)
     {
         s_stats.alloc_fail_no_memory++;
@@ -1543,7 +1576,6 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
             s_stats.alloc_fail_no_memory++;
             return NULL;
         }
-
         if (!s_iram_enabled)
         {
             s_stats.alloc_fail_no_memory++;
@@ -1551,7 +1583,6 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
         }
 
         uint16_t off_units = 0;
-
         if (!mxr_iram_find_free_from_start(units, &off_units))
         {
             s_stats.alloc_fail_no_memory++;
@@ -1576,6 +1607,7 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
         return NULL;
     }
 #endif
+
     /*
      * DRAM allocation.
      *
@@ -1591,14 +1623,18 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
             {
                 return NULL;
             }
+
 #ifdef CONFIG_MXR_SEARCH_BITMAP
             mxr_bitmap_set_range(off_units, units);
 #endif
+
             s_region[region].alloc_count++;
             mxr_region_allocated(region, units);
+
             return mxr_units_to_ptr(off_units);
         }
     }
+
     /*
      * Step 2: fallback chain.
      *
@@ -1617,7 +1653,6 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
     !defined(CONFIG_MXR_CROSS_REGION_AFTER_IRAM)
     /*
      * Cross-region BEFORE IRAM.
-     * (CONFIG_MXR_CROSS_REGION_FALLBACK is guaranteed defined here.)
      */
     fallback_ptr = mxr_try_cross_region(units, caps, region);
     if (fallback_ptr)
@@ -1668,11 +1703,11 @@ static void MXR_IRAM_ATTR mxr_free_locked(void *ptr)
 
     if (!s_initialized)
     {
+        s_stats.invalid_free_attempts++;
         return;
     }
 
     mxr_arena_id_t arena = mxr_ptr_to_arena(ptr);
-
     if (arena == MXR_ARENA_NONE)
     {
         s_stats.invalid_free_attempts++;
@@ -1683,9 +1718,7 @@ static void MXR_IRAM_ATTR mxr_free_locked(void *ptr)
     {
         uint16_t off_units = mxr_ptr_to_units(ptr);
         uint16_t key = mxr_desc_make_key(off_units, false);
-
         int index = mxr_desc_find_key(key);
-
         if (index < 0)
         {
             s_stats.invalid_free_attempts++;
@@ -1718,9 +1751,7 @@ static void MXR_IRAM_ATTR mxr_free_locked(void *ptr)
     {
         uint16_t off_units = mxr_iram_ptr_to_units(ptr);
         uint16_t key = mxr_desc_make_key(off_units, true);
-
         int index = mxr_desc_find_key(key);
-
         if (index < 0)
         {
             s_stats.invalid_free_attempts++;
@@ -1760,13 +1791,17 @@ void *MXR_IRAM_ATTR mxr_malloc(size_t size)
     return mxr_malloc_caps(size, MALLOC_CAP_32BIT);
 }
 
-void *mxr_calloc_caps(size_t count, size_t size, uint32_t caps)
+void *MXR_IRAM_ALLOC_ATTR mxr_calloc_caps(size_t count, size_t size, uint32_t caps)
 {
     size_t total_bytes;
     if (__builtin_mul_overflow(count, size, &total_bytes))
     {
+        mxr_lock();
+        s_stats.alloc_fail_no_memory++;
+        mxr_unlock();
         return NULL;
     }
+
     void *ptr = mxr_malloc_caps(total_bytes, caps);
     if (ptr)
     {
@@ -1776,12 +1811,12 @@ void *mxr_calloc_caps(size_t count, size_t size, uint32_t caps)
     return ptr;
 }
 
-void *mxr_calloc(size_t count, size_t size)
+void *MXR_IRAM_ALLOC_ATTR mxr_calloc(size_t count, size_t size)
 {
     return mxr_calloc_caps(count, size, MALLOC_CAP_32BIT);
 }
 
-void *mxr_zalloc_caps(size_t size, uint32_t caps)
+void *MXR_IRAM_ALLOC_ATTR mxr_zalloc_caps(size_t size, uint32_t caps)
 {
     void *ptr = mxr_malloc_caps(size, caps);
     if (ptr)
@@ -1792,7 +1827,7 @@ void *mxr_zalloc_caps(size_t size, uint32_t caps)
     return ptr;
 }
 
-void *mxr_zalloc(size_t size)
+void *MXR_IRAM_ALLOC_ATTR mxr_zalloc(size_t size)
 {
     return mxr_zalloc_caps(size, MALLOC_CAP_32BIT);
 }
@@ -1801,7 +1836,7 @@ void *mxr_zalloc(size_t size)
  *  Realloc
  * ================================================================ */
 
-void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
+void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
 {
     if (!ptr)
     {
@@ -1831,12 +1866,10 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
     }
 
     uint16_t new_units = mxr_bytes_to_units(newsize);
-
     if (new_units == 0)
     {
         new_units = 1;
     }
-
     if (new_units > MXR_MAX_LEN_UNITS)
     {
         return NULL;
@@ -1845,7 +1878,6 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
     mxr_lock();
 
     mxr_arena_id_t arena = mxr_ptr_to_arena(ptr);
-
     if (arena == MXR_ARENA_NONE)
     {
         s_stats.invalid_free_attempts++;
@@ -1860,9 +1892,7 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
     {
         uint16_t off_units = mxr_ptr_to_units(ptr);
         uint16_t key = mxr_desc_make_key(off_units, false);
-
         int index = mxr_desc_find_key(key);
-
         if (index < 0)
         {
             s_stats.invalid_free_attempts++;
@@ -1910,17 +1940,14 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
         {
             uint16_t extra = (uint16_t)(new_units - old_units);
             uint32_t block_end = (uint32_t)off_units + old_units;
-
             uint16_t region_end =
                 (uint16_t)(s_region[region].start_unit + s_region[region].total_units);
 
             uint32_t next_boundary;
-
             if (index + 1 < s_desc_count &&
                 !mxr_desc_is_iram(&s_desc[index + 1]))
             {
                 uint16_t next_off = mxr_desc_off(&s_desc[index + 1]);
-
                 if (next_off < region_end)
                 {
                     next_boundary = next_off;
@@ -1938,7 +1965,6 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
             if (next_boundary >= block_end)
             {
                 uint32_t gap = next_boundary - block_end;
-
                 if (gap >= extra)
                 {
 #ifdef CONFIG_MXR_SEARCH_BITMAP
@@ -1955,27 +1981,32 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
         }
 
         uint16_t copy_words = (old_units < new_units) ? old_units : new_units;
+
         void *new_ptr = mxr_malloc_caps_locked(newsize, caps);
         if (!new_ptr)
         {
             mxr_unlock();
             return NULL;
         }
+
         /*
          * Copy outside the lock.
          * Caller guarantees no concurrent access to ptr during realloc.
          */
         mxr_unlock();
+
         if (new_ptr != ptr)
         {
             mxr_memcpy_words(new_ptr, ptr, copy_words);
         }
+
         mxr_lock();
         if (new_ptr != ptr)
         {
             mxr_free_locked(ptr);
         }
         mxr_unlock();
+
         return new_ptr;
     }
 
@@ -1987,9 +2018,7 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
     {
         uint16_t off_units = mxr_iram_ptr_to_units(ptr);
         uint16_t key = mxr_desc_make_key(off_units, true);
-
         int index = mxr_desc_find_key(key);
-
         if (index < 0)
         {
             s_stats.invalid_free_attempts++;
@@ -1997,26 +2026,59 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
             return NULL;
         }
 
-        if (mxr_desc_is_exec(&s_desc[index]) && !(caps & MALLOC_CAP_EXEC))
+        bool old_exec = mxr_desc_is_exec(&s_desc[index]);
+
+        /*
+         * An existing EXEC block must remain EXEC.
+         */
+        if (old_exec && !(caps & MALLOC_CAP_EXEC))
         {
             caps |= MALLOC_CAP_EXEC;
         }
 
         uint16_t old_units = mxr_desc_len(&s_desc[index]);
-
         bool want_exec = (caps & MALLOC_CAP_EXEC) != 0;
-        bool caps_iram_ok =
-            want_exec &&
-            ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT)) == 0);
 
-        if (caps_iram_ok)
+        bool in_place_allowed = false;
+        if (want_exec)
         {
+            /*
+             * EXEC in-place is allowed only if the old block is already EXEC.
+             *
+             * Do not silently convert a non-EXEC fallback block into EXEC.
+             * If caller wants EXEC from a non-EXEC block, force move.
+             */
+            in_place_allowed =
+                old_exec &&
+                ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL)) == 0);
+        }
+        else
+        {
+            /*
+             * Non-EXEC IRAM fallback block can be reallocated in-place
+             * only if the new caps still allow IRAM fallback.
+             *
+             * This keeps DMA / 8BIT / SPIRAM requests out of IRAM.
+             */
+            in_place_allowed =
+                !old_exec &&
+                mxr_caps_allow_iram_fallback(caps);
+        }
+
+        if (in_place_allowed)
+        {
+            /*
+             * Same size.
+             */
             if (new_units == old_units)
             {
                 mxr_unlock();
                 return ptr;
             }
 
+            /*
+             * Shrink in place.
+             */
             if (new_units < old_units)
             {
                 uint16_t diff = (uint16_t)(old_units - new_units);
@@ -2028,13 +2090,28 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
                 return ptr;
             }
 
-            if (new_units > old_units)
+            /*
+             * Grow in place.
+             */
+            uint16_t extra = (uint16_t)(new_units - old_units);
+
+            /*
+             * Non-EXEC fallback growth must respect IRAM reserve
+             * and fallback block size limit.
+             */
+            if (!old_exec)
             {
-                uint16_t extra = (uint16_t)(new_units - old_units);
+                if (!mxr_iram_can_grow_fallback(old_units, new_units))
+                {
+                    in_place_allowed = false;
+                }
+            }
+
+            if (in_place_allowed)
+            {
                 uint32_t block_end = (uint32_t)off_units + old_units;
 
                 uint32_t next_boundary;
-
                 if (index + 1 < s_desc_count &&
                     mxr_desc_is_iram(&s_desc[index + 1]))
                 {
@@ -2048,7 +2125,6 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
                 if (next_boundary >= block_end)
                 {
                     uint32_t gap = next_boundary - block_end;
-
                     if (gap >= extra)
                     {
                         mxr_desc_set_len(&s_desc[index], new_units);
@@ -2061,28 +2137,37 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
             }
         }
 
+        /*
+         * Cannot resize in place.
+         * Allocate a new block, copy data, then free the old block.
+         */
         uint16_t copy_words = (old_units < new_units) ? old_units : new_units;
+
         void *new_ptr = mxr_malloc_caps_locked(newsize, caps);
         if (!new_ptr)
         {
             mxr_unlock();
             return NULL;
         }
+
         /*
          * Copy outside the lock.
          * Caller guarantees no concurrent access to ptr during realloc.
          */
         mxr_unlock();
+
         if (new_ptr != ptr)
         {
             mxr_memcpy_words(new_ptr, ptr, copy_words);
         }
+
         mxr_lock();
         if (new_ptr != ptr)
         {
             mxr_free_locked(ptr);
         }
         mxr_unlock();
+
         return new_ptr;
     }
 #endif
@@ -2091,7 +2176,7 @@ void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps)
     return NULL;
 }
 
-void *mxr_realloc(void *ptr, size_t newsize)
+void *MXR_IRAM_ALLOC_ATTR mxr_realloc(void *ptr, size_t newsize)
 {
     return mxr_realloc_caps(ptr, newsize, MALLOC_CAP_32BIT);
 }
@@ -2105,6 +2190,7 @@ static void mxr_init_regions_temp_single(void)
     memset(s_region, 0, sizeof(s_region));
 
     s_region_count = 1;
+
     s_region[0].caps = MXR_DRAM_CAPS_DEFAULT;
     s_region[0].start_unit = 0;
     s_region[0].total_units = s_arena_total_units;
@@ -2128,7 +2214,6 @@ static bool mxr_init_regions_exact(
     s_region_count = 0;
 
     uint16_t percent_sum = 0;
-
     for (uint8_t i = 0; i < count; i++)
     {
         percent_sum += cfg[i].percent;
@@ -2334,9 +2419,9 @@ static const char *mxr_next_percent(const char *p, uint8_t *value)
         has_digit = true;
         p++;
 
-        if (v > 0xFF)
+        if (v > 100)
         {
-            v = 0xFF;
+            return NULL;
         }
     }
 
@@ -2381,7 +2466,8 @@ static const char *mxr_parse_boundaries(
 
             if (value > 0xFFFF)
             {
-                value = 0xFFFF;
+                p = NULL;
+                break;
             }
         }
 
@@ -2426,12 +2512,10 @@ static const char *mxr_parse_percent(
     while (count < max_count)
     {
         p = mxr_next_percent(p, &out[count].percent);
-
         if (!p)
         {
             break;
         }
-
         count++;
     }
 
@@ -2443,11 +2527,23 @@ static bool mxr_init_regions_kconfig(void)
 {
     uint8_t total = MXR_USER_REGIONS;
 
+    /*
+     * Single flat region mode.
+     *
+     * If the user selects 1 region, we bypass the CSV parser
+     * entirely and create one region that spans the whole arena.
+     */
+    if (total == 1)
+    {
+        mxr_init_regions_temp_single();
+        return true;
+    }
+
     if (total < 2 || total > MXR_ACTIVE_TOTAL_REGIONS)
     {
         return false;
     }
-
+    
     mxr_region_cfg_t cfg[MXR_ACTIVE_TOTAL_REGIONS];
     uint16_t boundary_bytes[MXR_ACTIVE_TOTAL_REGIONS];
 
@@ -2630,7 +2726,6 @@ void mxr_init(void)
     }
 
     uint16_t largest_units = 0;
-
     for (uint8_t i = 0; i < s_region_count; i++)
     {
         if (s_region[i].total_units > largest_units)
@@ -2661,7 +2756,6 @@ void mxr_init(void)
         s_stats.iram_min_free_bytes = iram_bytes;
 
         uint16_t iram_largest = mxr_iram_largest_free_units();
-
         if (iram_largest > largest_units)
         {
             largest_units = iram_largest;
@@ -2711,7 +2805,6 @@ void mxr_get_status(mxr_status_t *status)
         free_bytes += (size_t)s_region[i].free_units * MXR_UNIT_SIZE;
 
         uint16_t largest_region = mxr_region_largest_free_units(i);
-
         if (largest_region > largest_units)
         {
             largest_units = largest_region;
@@ -2741,7 +2834,6 @@ void mxr_get_status(mxr_status_t *status)
         s_stats.iram_fallback_allocs = s_iram_fallback_allocs;
 
         uint16_t iram_largest = mxr_iram_largest_free_units();
-
         if (iram_largest > largest_units)
         {
             largest_units = iram_largest;
@@ -2769,7 +2861,6 @@ bool mxr_get_region_status(int region_index, mxr_region_status_t *status)
     {
         return false;
     }
-
     if (region_index < 0 || region_index >= s_region_count)
     {
         return false;
@@ -2817,7 +2908,6 @@ size_t mxr_get_free_size_caps(uint32_t caps)
     if (s_iram_enabled)
     {
         bool iram_ok = false;
-        bool is_exec_query = false;
 
         if (caps == 0)
         {
@@ -2828,7 +2918,6 @@ size_t mxr_get_free_size_caps(uint32_t caps)
             if ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL)) == 0)
             {
                 iram_ok = true;
-                is_exec_query = true;
             }
         }
         else if ((caps & MALLOC_CAP_32BIT) &&
@@ -2839,23 +2928,16 @@ size_t mxr_get_free_size_caps(uint32_t caps)
 
         if (iram_ok)
         {
-            if (is_exec_query)
+            if (caps & MALLOC_CAP_EXEC)
             {
-                /*
-                 * EXEC can use all IRAM.
-                 */
-                bytes += (size_t)s_iram_free_units * MXR_UNIT_SIZE;
+                bytes += (size_t)s_iram_min_free_units * MXR_UNIT_SIZE;
             }
             else
             {
-                /*
-                 * Non-EXEC fallback cannot use reserved IRAM.
-                 */
                 uint16_t reserve = mxr_iram_reserve_units();
-
-                if (s_iram_free_units > reserve)
+                if (s_iram_min_free_units > reserve)
                 {
-                    bytes += (size_t)(s_iram_free_units - reserve) * MXR_UNIT_SIZE;
+                    bytes += (size_t)(s_iram_min_free_units - reserve) * MXR_UNIT_SIZE;
                 }
             }
         }
@@ -2910,7 +2992,18 @@ size_t mxr_get_min_free_size_caps(uint32_t caps)
 
         if (iram_ok)
         {
-            bytes += (size_t)s_iram_min_free_units * MXR_UNIT_SIZE;
+            if (caps & MALLOC_CAP_EXEC)
+            {
+                bytes += (size_t)s_iram_min_free_units * MXR_UNIT_SIZE;
+            }
+            else
+            {
+                uint16_t reserve = mxr_iram_reserve_units();
+                if (s_iram_min_free_units > reserve)
+                {
+                    bytes += (size_t)(s_iram_min_free_units - reserve) * MXR_UNIT_SIZE;
+                }
+            }
         }
     }
 #endif
@@ -2956,10 +3049,11 @@ void mxr_dump(void)
                    (unsigned)st.max_active_allocs);
 
     ESP_EARLY_LOGI(TAG,
-                   "exec_allocs=%u iram_fallback=%u cross_region=%u",
+                   "exec_allocs=%u iram_fallback=%u cross_region=%u cross_skip_frag=%u",
                    (unsigned)st.exec_allocs,
                    (unsigned)st.iram_fallback_allocs,
-                   (unsigned)st.cross_region_allocs);
+                   (unsigned)st.cross_region_allocs,
+                   (unsigned)st.cross_region_skip_fragmented);
 
 #ifdef CONFIG_MXR_USE_IRAM
     if (s_iram_enabled)
@@ -2980,7 +3074,6 @@ void mxr_dump(void)
     for (uint8_t i = 0; i < st.region_count && i < MXR_ACTIVE_TOTAL_REGIONS; i++)
     {
         mxr_region_status_t rs;
-
         if (!mxr_get_region_status(i, &rs))
         {
             continue;
@@ -3001,39 +3094,27 @@ void mxr_dump(void)
                        (unsigned)rs.alloc_count);
     }
 
+    static mxr_desc_t snapshot[CONFIG_MXR_MAX_DESC];
     uint16_t desc_count = 0;
 
     mxr_lock();
     desc_count = s_desc_count;
+    if (desc_count > CONFIG_MXR_MAX_DESC)
+    {
+        desc_count = CONFIG_MXR_MAX_DESC;
+    }
+    memcpy(snapshot, s_desc, (size_t)desc_count * sizeof(mxr_desc_t));
     mxr_unlock();
 
     for (uint16_t i = 0; i < desc_count; i++)
     {
-        mxr_desc_t d;
-        bool ok = false;
-
-        mxr_lock();
-
-        if (i < s_desc_count)
-        {
-            d = s_desc[i];
-            ok = true;
-        }
-
-        mxr_unlock();
-
-        if (!ok)
-        {
-            break;
-        }
-
         ESP_EARLY_LOGI(TAG,
                        "desc[%u]: off=%u len=%u iram=%d exec=%d",
                        (unsigned)i,
-                       (unsigned)mxr_desc_off(&d),
-                       (unsigned)mxr_desc_len(&d),
-                       (int)mxr_desc_is_iram(&d),
-                       (int)mxr_desc_is_exec(&d));
+                       (unsigned)mxr_desc_off(&snapshot[i]),
+                       (unsigned)mxr_desc_len(&snapshot[i]),
+                       (int)mxr_desc_is_iram(&snapshot[i]),
+                       (int)mxr_desc_is_exec(&snapshot[i]));
     }
 
     ESP_EARLY_LOGI(TAG,
