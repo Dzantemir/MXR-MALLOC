@@ -12,32 +12,32 @@
   with size-class regions, IRAM fallback, cross-region fallback, and optional bitmap acceleration.
 </p>
 
----
+\---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Memory Layout](#memory-layout)
-- [Allocation Policy](#allocation-policy)
-- [Descriptor Format](#descriptor-format)
-- [Region Configuration](#region-configuration)
-- [Search Modes](#search-modes)
-- [IRAM Support](#iram-support)
-- [Cross-Region Fallback](#cross-region-fallback)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [API Reference](#api-reference)
-- [Usage Examples](#usage-examples)
-- [Comparison with Original Heap](#comparison-with-original-heap)
-- [Performance Considerations](#performance-considerations)
-- [Diagnostics](#diagnostics)
-- [Project Structure](#project-structure)
-- [FAQ](#faq)
-- [License](#license)
+* [Overview](#overview)
+* [Features](#features)
+* [Architecture](#architecture)
+* [Memory Layout](#memory-layout)
+* [Allocation Policy](#allocation-policy)
+* [Descriptor Format](#descriptor-format)
+* [Region Configuration](#region-configuration)
+* [Search Modes](#search-modes)
+* [IRAM Support](#iram-support)
+* [Cross-Region Fallback](#cross-region-fallback)
+* [Installation](#installation)
+* [Configuration](#configuration)
+* [API Reference](#api-reference)
+* [Usage Examples](#usage-examples)
+* [Comparison with Original Heap](#comparison-with-original-heap)
+* [Performance Considerations](#performance-considerations)
+* [Diagnostics](#diagnostics)
+* [Project Structure](#project-structure)
+* [FAQ](#faq)
+* [License](#license)
 
----
+\---
 
 ## Overview
 
@@ -48,44 +48,46 @@ per-block overhead inside the arena.
 
 The allocator manages two physical arenas:
 
-| Arena | Address Range | Capabilities |
-|-------|--------------|--------------|
-| **DRAM** | `_bss_end` -> `0x40000000` | `8BIT` / `32BIT` / `DMA` / `INTERNAL` |
-| **IRAM** | `_iram_end` -> `0x40100000 + SOC_IRAM_SIZE` | `32BIT` / `EXEC` |
+|Arena|Address Range|Capabilities|
+|-|-|-|
+|**DRAM**|`\_bss\_end` -> `0x40000000`|`8BIT` / `32BIT` / `DMA` / `INTERNAL`|
+|**IRAM**|`\_iram\_end` -> `0x40100000 + SOC\_IRAM\_SIZE`|`32BIT` / `EXEC`|
 
 Ordinary allocations go to **DRAM first**. When DRAM is exhausted, 32-bit
-allocations **fall back to IRAM**. Executable memory (`MALLOC_CAP_EXEC`) is
+allocations **fall back to IRAM**. Executable memory (`MALLOC\_CAP\_EXEC`) is
 served **exclusively from IRAM**.
 
----
+\---
 
 ## Features
 
-- **Zero in-band overhead** — metadata lives in a separate descriptor table.
-- **Exact 4-byte alignment** — every allocation is naturally aligned.
-- **Size-class regions** — DRAM is split into configurable regions by block size.
-- **IRAM fallback** — unused IRAM is reclaimed as a 32-bit fallback pool.
-- **Cross-region DRAM fallback (opt-in)** — when a size-class region and IRAM
-  are both exhausted, allocation can spill into other DRAM regions as a last
-  resort (disabled by default to avoid fragmentation).
-- **EXEC support** — `MALLOC_CAP_EXEC` allocations come from IRAM only.
-- **Two search modes** — descriptor gap search (default) or bitmap search
-  (carved from the arena, no fixed 4 KB cost).
-- **Linker `--wrap` integration** — replaces the heap without touching the SDK.
-- **Full Kconfig integration** — every parameter is set via `menuconfig`.
-- **Rich diagnostics** — per-region stats, fallback counters, heap dump.
-- **IRAM-safe hot path** — `malloc`/`free` can be placed in IRAM.
-- **Word-wise copy/clear** — `realloc`/`calloc`/`zalloc` never emit byte stores
-  into IRAM (IRAM is 32-bit access only).
+* **Zero in-band overhead** — metadata lives in a separate descriptor table.
+* **Exact 4-byte alignment** — every allocation is naturally aligned.
+* **Size-class regions** — DRAM is split into configurable regions by block size.
+* **IRAM fallback** — unused IRAM is reclaimed as a 32-bit fallback pool.
+* **Cross-region DRAM fallback (opt-in)** — when a size-class region and IRAM
+are both exhausted, allocation can spill into other DRAM regions as a last
+resort (disabled by default to avoid fragmentation).
+* **EXEC support** — `MALLOC\_CAP\_EXEC` allocations come from IRAM only.
+* **Two search modes** — descriptor gap search (default) or bitmap search
+(carved from the arena, no fixed 4 KB cost).
+* **Linker `--wrap` integration** — replaces the heap without touching the SDK.
+* **Full Kconfig integration** — every parameter is set via `menuconfig`.
+* **Rich diagnostics** — per-region stats, fallback counters, heap dump.
+* **IRAM-safe hot path** — `malloc`/`free` are placed in IRAM by default;
+`calloc`/`zalloc`/`realloc` can optionally join them via
+`CONFIG\_MXR\_IRAM\_PATH\_ALLOC\_FAMILY`.
+* **Word-wise copy/clear** — `realloc`/`calloc`/`zalloc` never emit byte stores
+into IRAM (IRAM is 32-bit access only).
 
----
+\---
 
 ## Architecture
 
 ```text
 +-------------------------------------------------------------+
 |                    Application / SDK                        |
-|         malloc / calloc / realloc / heap_caps_malloc        |
+|         malloc / calloc / realloc / heap\_caps\_malloc        |
 +---------------------------+---------------------------------+
                             |  linker --wrap
                             v
@@ -110,7 +112,7 @@ before all IRAM descriptors and one binary search serves both.
 ### Allocation flow
 
 ```text
-heap_caps_malloc(size, caps)
+heap\_caps\_malloc(size, caps)
         |
         v
   +-----------+
@@ -153,7 +155,7 @@ IRAM success?         DRAM success?       DRAM success?
                                         DRAM ptr     NULL
 ```
 
----
+\---
 
 ## Memory Layout
 
@@ -168,42 +170,42 @@ IRAM success?         DRAM success?       DRAM success?
     |             |  | 4-128B |132-1020| 1024-max  |   |
     |             |  | (15%)  | (45%)  | (20%+rest)|   |
     |             |  +--------+--------+-----------+   |
-    |             |  [ bitmap (if enabled, carved) ]   |
+    |             |  \[ bitmap (if enabled, carved) ]   |
 ```
 
 ### IRAM arena
 
 ```text
-0x40100000                              0x40100000 + SOC_IRAM_SIZE
+0x40100000                              0x40100000 + SOC\_IRAM\_SIZE
     |  .iram.text |      IRAM heap arena      |
     |<----------->|<------------------------->|
     |   (code)    |  EXEC blocks grow -->     |
     |             |  <-- fallback blocks grow |
-    |             |  [ reserve for EXEC ]     |
+    |             |  \[ reserve for EXEC ]     |
 ```
 
----
+\---
 
 ## Allocation Policy
 
-| Request | Destination | Notes |
-|---------|-------------|-------|
-| `malloc(size)` | DRAM -> IRAM fallback | equivalent to `MALLOC_CAP_32BIT` |
-| `MALLOC_CAP_32BIT` | DRAM -> IRAM fallback | ordinary 32-bit memory |
-| `MALLOC_CAP_8BIT` | DRAM only | byte-accessible memory |
-| `MALLOC_CAP_DMA` | DRAM only | DMA-capable memory |
-| `MALLOC_CAP_INTERNAL` | DRAM only | internal RAM |
-| `MALLOC_CAP_EXEC` | IRAM only | executable memory |
-| `MALLOC_CAP_EXEC \| 32BIT` | IRAM only | executable 32-bit memory |
-| Cross-region fallback | Other DRAM regions | Only if `CONFIG_MXR_CROSS_REGION_FALLBACK=y` and own region + IRAM exhausted |
-| `MALLOC_CAP_SPIRAM` | `NULL` | not supported on ESP8266 |
+|Request|Destination|Notes|
+|-|-|-|
+|`malloc(size)`|DRAM -> IRAM fallback|equivalent to `MALLOC\_CAP\_32BIT`|
+|`MALLOC\_CAP\_32BIT`|DRAM -> IRAM fallback|ordinary 32-bit memory|
+|`MALLOC\_CAP\_8BIT`|DRAM only|byte-accessible memory|
+|`MALLOC\_CAP\_DMA`|DRAM only|DMA-capable memory|
+|`MALLOC\_CAP\_INTERNAL`|DRAM only|internal RAM|
+|`MALLOC\_CAP\_EXEC`|IRAM only|executable memory|
+|`MALLOC\_CAP\_EXEC \| 32BIT`|IRAM only|executable 32-bit memory|
+|Cross-region fallback|Other DRAM regions|Only if `CONFIG\_MXR\_CROSS\_REGION\_FALLBACK=y` and own region + IRAM exhausted|
+|`MALLOC\_CAP\_SPIRAM`|`NULL`|not supported on ESP8266|
 
 ### Fallback chain (32BIT / default)
 
 ```text
 1. Own DRAM size-class region
-2. IRAM fallback (if CONFIG_MXR_USE_IRAM=y)
-3. Cross-region DRAM fallback (if CONFIG_MXR_CROSS_REGION_FALLBACK=y)
+2. IRAM fallback (if CONFIG\_MXR\_USE\_IRAM=y)
+3. Cross-region DRAM fallback (if CONFIG\_MXR\_CROSS\_REGION\_FALLBACK=y)
 4. NULL
 ```
 
@@ -211,21 +213,21 @@ IRAM success?         DRAM success?       DRAM success?
 
 ```text
 IRAM fallback is allowed when ALL of:
-  - CONFIG_MXR_USE_IRAM = y
+  - CONFIG\_MXR\_USE\_IRAM = y
   - request does NOT include EXEC, DMA, 8BIT or SPIRAM
   - request includes 32BIT (or caps == 0)
-  - IRAM free >= requested + CONFIG_MXR_IRAM_RESERVE_BYTES
-  - requested size <= CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES (0 = unlimited)
+  - IRAM free >= requested + CONFIG\_MXR\_IRAM\_RESERVE\_BYTES
+  - requested size <= CONFIG\_MXR\_IRAM\_FALLBACK\_MAX\_BYTES (0 = unlimited)
 ```
 
----
+\---
 
 ## Descriptor Format
 
 Each live block owns one 4-byte descriptor:
 
 ```text
-  off_flags (16 bits)              len_flags (16 bits)
+  off\_flags (16 bits)              len\_flags (16 bits)
 +---+-------------------+       +---+-------------------+
 | A |   offset (15 bit) |       | E |  length-1 (15 bit)|
 +---+-------------------+       +---+-------------------+
@@ -247,14 +249,14 @@ IRAM EXEC block:     off bit15 = 1, len bit15 = 1
 
 **Limits**
 
-| Parameter | Value |
-|-----------|-------|
-| Max offset | 32 767 units (131 068 bytes) |
-| Max block length | 32 768 units (131 072 bytes) |
-| Max arena size | 32 768 units (131 072 bytes) |
-| Alignment | 4 bytes |
+|Parameter|Value|
+|-|-|
+|Max offset|32 767 units (131 068 bytes)|
+|Max block length|32 768 units (131 072 bytes)|
+|Max arena size|32 768 units (131 072 bytes)|
+|Alignment|4 bytes|
 
----
+\---
 
 ## Region Configuration
 
@@ -262,81 +264,96 @@ DRAM regions are defined by their **lower boundaries only**, so gaps and
 overlaps are impossible by construction. The last region is always unlimited.
 
 ```text
-CONFIG_MXR_REGIONS=3
-CONFIG_MXR_REGION_SIZES="4,132,1024"
-CONFIG_MXR_REGION_PERCENTS="15,45,20"
+CONFIG\_MXR\_REGIONS=3
+CONFIG\_MXR\_REGION\_SIZES="4,132,1024"
+CONFIG\_MXR\_REGION\_PERCENTS="15,45,20"
 ```
 
 creates:
 
-| Region | Accepts | Memory |
-|--------|---------|--------|
-| 0 | 4 .. 128 B | 15% |
-| 1 | 132 .. 1020 B | 45% |
-| 2 | 1024 B .. max | 20% + remainder |
+|Region|Accepts|Memory|
+|-|-|-|
+|0|4 .. 128 B|15%|
+|1|132 .. 1020 B|45%|
+|2|1024 B .. max|20% + remainder|
 
 If the percent sum is below 100, the remainder is added to the last region.
 If the last percent is `0`, the last region receives all remaining memory.
 
----
+\---
 
 ## Search Modes
 
 ### Descriptor gap search (default)
 
 ```text
-CONFIG_MXR_SEARCH_DESCRIPTOR=y
+CONFIG\_MXR\_SEARCH\_DESCRIPTOR=y
 ```
 
 Walks the sorted descriptor table and finds the first gap >= requested size.
 
-- **Cost:** O(N) where N = active descriptors in the region
-- **RAM:** 0 extra
-- **Best for:** <= 512 active allocations
+* **Cost:** O(N) where N = active descriptors in the region
+* **RAM:** 0 extra
+* **Best for:** <= 512 active allocations
 
 ### Bitmap search (optional)
 
 ```text
-CONFIG_MXR_SEARCH_BITMAP=y
+CONFIG\_MXR\_SEARCH\_BITMAP=y
 ```
 
 Maintains a 1-bit-per-unit bitmap **carved from the end of the DRAM arena** at
 init time, so its size scales with the actual arena instead of a fixed 4 KB.
 
 ```text
-Arena:  [  allocatable units  ][ bitmap (carved) ]
-         <--- s_arena_total --><--- s_bitmap --->
+Arena:  \[  allocatable units  ]\[ bitmap (carved) ]
+         <--- s\_arena\_total --><--- s\_bitmap --->
 
 For 80 KB DRAM:
   80 000 / 4 = 20 000 units
   20 000 / 8 = 2 500 bytes bitmap
 ```
 
-- **Cost:** O(arena_units / 32) word scans
-- **RAM:** ~2.5 KB for an 80 KB arena (carved, not static)
-- **Covers:** DRAM only — IRAM always uses descriptor search
+* **Cost:** O(arena\_units / 32) word scans
+* **RAM:** \~2.5 KB for an 80 KB arena (carved, not static)
+* **Covers:** DRAM only — IRAM always uses descriptor search
 
----
+\---
 
 ## IRAM Support
 
 ```text
-CONFIG_MXR_USE_IRAM=y                    # default y if !CONFIG_HEAP_DISABLE_IRAM
-CONFIG_MXR_IRAM_RESERVE_BYTES=2048       # reserve for EXEC allocations
-CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES=0     # 0 = unlimited fallback block size
+CONFIG\_MXR\_USE\_IRAM=y                    # default y if !CONFIG\_HEAP\_DISABLE\_IRAM
+CONFIG\_MXR\_IRAM\_RESERVE\_BYTES=2048       # reserve for EXEC allocations
+CONFIG\_MXR\_IRAM\_FALLBACK\_MAX\_BYTES=0     # 0 = unlimited fallback block size
 ```
 
-- **EXEC allocations** grow from the **start** of IRAM.
-- **Fallback allocations** grow from the **end** of IRAM.
-- A **reserve** (default 2048 bytes) protects EXEC space from fallback.
-- EXEC allocations ignore the reserve.
-- IRAM is never used for `DMA` or `8BIT` requests.
+* **EXEC allocations** grow from the **start** of IRAM.
+* **Fallback allocations** grow from the **end** of IRAM.
+* A **reserve** (default 2048 bytes) protects EXEC space from fallback.
+* EXEC allocations ignore the reserve.
+* IRAM is never used for `DMA` or `8BIT` requests.
 
 Because IRAM on ESP8266 is 32-bit access only, the allocator uses word-wise
-copy/clear (`mxr_memcpy_words` / `mxr_memset_words`) for any operation that may
+copy/clear (`mxr\_memcpy\_words` / `mxr\_memset\_words`) for any operation that may
 touch IRAM, so `realloc`/`calloc`/`zalloc` never emit byte stores there.
 
----
+### IRAM hot path scope
+
+By default only `malloc`/`free` are IRAM-resident. The Kconfig choice
+**IRAM hot path scope** selects which allocator functions live in IRAM:
+
+|Choice|Functions in IRAM|Footprint|
+|-|-|-|
+|`MXR\_IRAM\_PATH\_CORE` (default)|`malloc` / `free`|smallest|
+|`MXR\_IRAM\_PATH\_ALLOC\_FAMILY`|`malloc` / `free` / `calloc` / `zalloc` / `realloc`|larger|
+
+The scope choice is active only when `CONFIG\_MXR\_IRAM\_HOT\_PATH\_DISABLED=n`.
+Enable `MXR\_IRAM\_PATH\_ALLOC\_FAMILY` if allocations can run from contexts that
+execute while flash cache is disabled (e.g. flash-write callbacks). Verify IRAM
+usage with `idf.py size` after enabling.
+
+\---
 
 ## Cross-Region Fallback
 
@@ -344,8 +361,8 @@ touch IRAM, so `realloc`/`calloc`/`zalloc` never emit byte stores there.
 trade-off.
 
 ```text
-CONFIG_MXR_CROSS_REGION_FALLBACK=y
-CONFIG_MXR_CROSS_REGION_AFTER_IRAM=y     # default y
+CONFIG\_MXR\_CROSS\_REGION\_FALLBACK=y
+CONFIG\_MXR\_CROSS\_REGION\_AFTER\_IRAM=y     # default y
 ```
 
 ### Why opt-in
@@ -363,51 +380,51 @@ Therefore cross-region is a **last resort**, tried only after:
 ### Region selection
 
 When cross-region fires, the allocator picks the DRAM region with the
-**smallest `min_units`** that still has enough free space. This minimizes
+**smallest `min\_units`** that still has enough free space. This minimizes
 damage: a 10-unit block prefers region 1 (min=33) over region 2 (min=256),
 keeping region 2 intact for large buffers.
 
 ### Monitoring
 
-Watch `cross_region_allocs` in `mxr_get_status()` / `mxr_dump()`:
+Watch `cross\_region\_allocs` in `mxr\_get\_status()` / `mxr\_dump()`:
 
 ```text
-cross_region_allocs=17   <- if this grows, increase own region percent
+cross\_region\_allocs=17   <- if this grows, increase own region percent
 ```
 
-If the counter grows steadily, your `MXR_REGION_PERCENTS` are misconfigured —
+If the counter grows steadily, your `MXR\_REGION\_PERCENTS` are misconfigured —
 the own region is chronically undersized.
 
----
+\---
 
 ## Installation
 
-### 1. Copy the component
+### 1\. Copy the component
 
 ```bash
-cp -r mxr_heap/ <your_project>/components/mxr_heap/
+cp -r mxr\_heap/ <your\_project>/components/mxr\_heap/
 ```
 
-### 2. Component structure
+### 2\. Component structure
 
 ```text
-components/mxr_heap/
+components/mxr\_heap/
 |-- CMakeLists.txt
 |-- Kconfig.projbuild
 |-- include/
-|   `-- mxr_malloc.h
-|-- mxr_malloc.c
-`-- mxr_heap_wrap.c
+|   `-- mxr\_malloc.h
+|-- mxr\_malloc.c
+`-- mxr\_heap\_wrap.c
 ```
 
-### 3. Configure
+### 3\. Configure
 
 ```bash
 idf.py menuconfig
 # -> MxR-malloc
 ```
 
-### 4. Build
+### 4\. Build
 
 ```bash
 idf.py fullclean
@@ -417,182 +434,185 @@ idf.py build
 > Always run `fullclean` after changing MxR Kconfig options. Stale `sdkconfig`
 > values can otherwise override the new defaults.
 
----
+\---
 
 ## Configuration
 
 ### Global
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `MXR_MAX_DESC` | int (16-4096) | `256` | Max simultaneous allocations (shared DRAM+IRAM) |
-| `MXR_IRAM_HOT_PATH_DISABLED` | bool | `n` | Place malloc/free hot path in flash instead of IRAM |
+|Option|Type|Default|Description|
+|-|-|-|-|
+|`MXR\_MAX\_DESC`|int (16-4096)|`256`|Max simultaneous allocations (shared DRAM+IRAM)|
+|`MXR\_IRAM\_HOT\_PATH\_DISABLED`|bool|`n`|Place malloc/free hot path in flash instead of IRAM|
+|`MXR\_IRAM\_PATH\_CORE` / `MXR\_IRAM\_PATH\_ALLOC\_FAMILY`|choice|`CORE`|IRAM hot path scope: `malloc`/`free` only (CORE) or also `calloc`/`zalloc`/`realloc` (ALLOC\_FAMILY). Active only when `MXR\_IRAM\_HOT\_PATH\_DISABLED=n`|
 
 ### IRAM
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `MXR_USE_IRAM` | bool | `y`* | Enable IRAM heap (EXEC + 32BIT fallback) |
-| `MXR_IRAM_RESERVE_BYTES` | int (0-32768) | `2048` | IRAM reserved for EXEC allocations |
-| `MXR_IRAM_FALLBACK_MAX_BYTES` | int (0-65536) | `0` | Max non-EXEC block allowed into IRAM (0=inf) |
+|Option|Type|Default|Description|
+|-|-|-|-|
+|`MXR\_USE\_IRAM`|bool|`y`\*|Enable IRAM heap (EXEC + 32BIT fallback)|
+|`MXR\_IRAM\_RESERVE\_BYTES`|int (0-32768)|`2048`|IRAM reserved for EXEC allocations|
+|`MXR\_IRAM\_FALLBACK\_MAX\_BYTES`|int (0-65536)|`0`|Max non-EXEC block allowed into IRAM (0=inf)|
 
-\* default `y` if `CONFIG_HEAP_DISABLE_IRAM` is not set.
+\* default `y` if `CONFIG\_HEAP\_DISABLE\_IRAM` is not set.
 
 ### Regions
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `MXR_REGIONS` | int (2-16) | `3` | Total number of DRAM regions |
-| `MXR_REGION_SIZES` | string | `"4,132,1024"` | Lower block-size boundaries (bytes) |
-| `MXR_REGION_PERCENTS` | string | `"15,45,20"` | Memory weight per region (%) |
+|Option|Type|Default|Description|
+|-|-|-|-|
+|`MXR\_REGIONS`|int (2-16)|`3`|Total number of DRAM regions|
+|`MXR\_REGION\_SIZES`|string|`"4,132,1024"`|Lower block-size boundaries (bytes)|
+|`MXR\_REGION\_PERCENTS`|string|`"15,45,20"`|Memory weight per region (%)|
 
 ### Cross-region fallback
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `MXR_CROSS_REGION_FALLBACK` | bool | `n` | Enable cross-region DRAM fallback (last resort) |
-| `MXR_CROSS_REGION_AFTER_IRAM` | bool | `y` | Cross-region only after IRAM is exhausted |
+|Option|Type|Default|Description|
+|-|-|-|-|
+|`MXR\_CROSS\_REGION\_FALLBACK`|bool|`n`|Enable cross-region DRAM fallback (last resort)|
+|`MXR\_CROSS\_REGION\_AFTER\_IRAM`|bool|`y`|Cross-region only after IRAM is exhausted|
 
 ### Search mode
 
-| Option | Description |
-|--------|-------------|
-| `MXR_SEARCH_DESCRIPTOR` | Descriptor gap search (default, 0 extra RAM) |
-| `MXR_SEARCH_BITMAP` | Bitmap search (carved from arena, DRAM only) |
+|Option|Description|
+|-|-|
+|`MXR\_SEARCH\_DESCRIPTOR`|Descriptor gap search (default, 0 extra RAM)|
+|`MXR\_SEARCH\_BITMAP`|Bitmap search (carved from arena, DRAM only)|
 
 ### Linker integration
 
-| Option | Default | Wraps |
-|--------|---------|-------|
-| `MXR_WRAP_HEAP_QUERY` | `y` | `heap_caps_get_free_size`, `..._minimum_free_size`, `..._dram_free_size` |
-| `MXR_WRAP_DEFAULT_POOL` | `y` | `heap_caps_malloc_default`, `heap_caps_realloc_default` |
-| `MXR_WRAP_ESP_SYSTEM` | `y` | `esp_get_free_heap_size`, `..._minimum`, `..._internal` |
-| `MXR_WRAP_LIBC` | `n` | `malloc`, `free`, `calloc`, `realloc`, `zalloc` |
-| `MXR_WARN_HEAP_TRACING` | `y` | Warn if `CONFIG_HEAP_TRACING` is enabled |
+|Option|Default|Wraps|
+|-|-|-|
+|`MXR\_WRAP\_HEAP\_QUERY`|`y`|`heap\_caps\_get\_free\_size`, `...\_minimum\_free\_size`, `...\_dram\_free\_size`|
+|`MXR\_WRAP\_DEFAULT\_POOL`|`y`|`heap\_caps\_malloc\_default`, `heap\_caps\_realloc\_default`|
+|`MXR\_WRAP\_ESP\_SYSTEM`|`y`|`esp\_get\_free\_heap\_size`, `...\_minimum`, `...\_internal`|
+|`MXR\_WRAP\_LIBC`|`n`|`malloc`, `free`, `calloc`, `realloc`, `zalloc`|
+|`MXR\_WARN\_HEAP\_TRACING`|`y`|Warn if `CONFIG\_HEAP\_TRACING` is enabled|
 
----
+\---
 
 ## API Reference
 
 ### Core API
 
 ```c
-/* lifecycle + plain API */
-void  mxr_init(void);
-void *mxr_malloc(size_t size);
-void  mxr_free(void *ptr);
-void *mxr_calloc(size_t count, size_t size);
-void *mxr_realloc(void *ptr, size_t size);
-void *mxr_zalloc(size_t size);
+/\* lifecycle + plain API \*/
+void  mxr\_init(void);
+void \*mxr\_malloc(size\_t size);
+void  mxr\_free(void \*ptr);
+void \*mxr\_calloc(size\_t count, size\_t size);
+void \*mxr\_realloc(void \*ptr, size\_t size);
+void \*mxr\_zalloc(size\_t size);
 
-/* capability-aware API */
-void *mxr_malloc_caps(size_t size, uint32_t caps);
-void *mxr_calloc_caps(size_t count, size_t size, uint32_t caps);
-void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps);
-void *mxr_zalloc_caps(size_t size, uint32_t caps);
+/\* capability-aware API \*/
+void \*mxr\_malloc\_caps(size\_t size, uint32\_t caps);
+void \*mxr\_calloc\_caps(size\_t count, size\_t size, uint32\_t caps);
+void \*mxr\_realloc\_caps(void \*ptr, size\_t newsize, uint32\_t caps);
+void \*mxr\_zalloc\_caps(size\_t size, uint32\_t caps);
 
-/* query + diagnostics */
-size_t mxr_get_free_size_caps(uint32_t caps);
-size_t mxr_get_min_free_size_caps(uint32_t caps);
-void   mxr_get_status(mxr_status_t *status);
-bool   mxr_get_region_status(int region_index, mxr_region_status_t *status);
-void   mxr_dump(void);
+/\* query + diagnostics \*/
+size\_t mxr\_get\_free\_size\_caps(uint32\_t caps);
+size\_t mxr\_get\_min\_free\_size\_caps(uint32\_t caps);
+void   mxr\_get\_status(mxr\_status\_t \*status);
+bool   mxr\_get\_region\_status(int region\_index, mxr\_region\_status\_t \*status);
+void   mxr\_dump(void);
 ```
 
 ### ESP heap compatibility (via `--wrap`)
 
 ```text
-heap_caps_malloc(size, caps)        -> mxr_malloc_caps(size, caps)
-heap_caps_free(ptr)                 -> mxr_free(ptr)
-heap_caps_calloc(n, size, caps)     -> mxr_calloc_caps(n, size, caps)
-heap_caps_realloc(ptr, size, caps)  -> mxr_realloc_caps(ptr, size, caps)
-heap_caps_zalloc(size, caps)        -> mxr_zalloc_caps(size, caps)
-esp_get_free_heap_size()            -> mxr_get_free_size_caps(MALLOC_CAP_32BIT)
-heap_caps_get_dram_free_size()      -> mxr_get_free_size_caps(8BIT|32BIT|DMA)
+heap\_caps\_malloc(size, caps)        -> mxr\_malloc\_caps(size, caps)
+heap\_caps\_free(ptr)                 -> mxr\_free(ptr)
+heap\_caps\_calloc(n, size, caps)     -> mxr\_calloc\_caps(n, size, caps)
+heap\_caps\_realloc(ptr, size, caps)  -> mxr\_realloc\_caps(ptr, size, caps)
+heap\_caps\_zalloc(size, caps)        -> mxr\_zalloc\_caps(size, caps)
+esp\_get\_free\_heap\_size()            -> mxr\_get\_free\_size\_caps(MALLOC\_CAP\_32BIT)
+heap\_caps\_get\_dram\_free\_size()      -> mxr\_get\_free\_size\_caps(8BIT|32BIT|DMA)
 ```
 
----
+\---
 
 ## Usage Examples
 
 ### Basic usage
 
 ```c
-#include "mxr_malloc.h"
+#include "mxr\_malloc.h"
 
-void app_main(void)
+void app\_main(void)
 {
-    /* ordinary allocation: DRAM first, IRAM fallback if needed */
-    char *buf = malloc(1024);
+    /\* ordinary allocation: DRAM first, IRAM fallback if needed \*/
+    char \*buf = malloc(1024);
     if (buf) {
         memset(buf, 0, 1024);
         free(buf);
     }
 
-    /* DMA-safe buffer: always DRAM */
-    void *dma = heap_caps_malloc(512, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
-    if (dma) heap_caps_free(dma);
+    /\* DMA-safe buffer: always DRAM \*/
+    void \*dma = heap\_caps\_malloc(512, MALLOC\_CAP\_DMA | MALLOC\_CAP\_32BIT);
+    if (dma) heap\_caps\_free(dma);
 
-    /* executable memory: IRAM only */
-    void *code = heap_caps_malloc(256, MALLOC_CAP_EXEC | MALLOC_CAP_32BIT);
-    if (code) heap_caps_free(code);
+    /\* executable memory: IRAM only \*/
+    void \*code = heap\_caps\_malloc(256, MALLOC\_CAP\_EXEC | MALLOC\_CAP\_32BIT);
+    if (code) heap\_caps\_free(code);
 }
 ```
 
 ### Diagnostics
 
 ```c
-mxr_status_t st;
-mxr_get_status(&st);
-printf("free=%u min=%u desc=%u/%u exec=%u fallback=%u cross=%u invalid_free=%u\n",
-       (unsigned)st.free_bytes,
-       (unsigned)st.min_free_bytes,
-       (unsigned)st.active_allocs,
-       (unsigned)st.desc_capacity,
-       (unsigned)st.exec_allocs,
-       (unsigned)st.iram_fallback_allocs,
-       (unsigned)st.cross_region_allocs,
-       (unsigned)st.invalid_free_attempts);
+mxr\_status\_t st;
+mxr\_get\_status(\&st);
+printf("free=%u min=%u desc=%u/%u exec=%u fallback=%u cross=%u invalid\_free=%u\\n",
+       (unsigned)st.free\_bytes,
+       (unsigned)st.min\_free\_bytes,
+       (unsigned)st.active\_allocs,
+       (unsigned)st.desc\_capacity,
+       (unsigned)st.exec\_allocs,
+       (unsigned)st.iram\_fallback\_allocs,
+       (unsigned)st.cross\_region\_allocs,
+       (unsigned)st.invalid\_free\_attempts);
 ```
 
 ### Full heap dump
 
 ```c
-/* Prints all regions and descriptors to UART */
-mxr_dump();
+/\* Prints all regions and descriptors to UART \*/
+mxr\_dump();
 ```
 
----
+\---
 
 ## Comparison with Original Heap
 
-| Feature | Original ESP8266 heap | MxR-malloc |
-|---------|----------------------|------------|
-| Metadata location | in-band (8 B/block) | out-of-band table (4 B/entry) |
-| Free-space structure | linked free list per region | sorted descriptors + optional bitmap |
-| Allocation search | O(N) list walk | O(N) gap scan or O(W) bitmap words |
-| Max allocations | memory-bound | `CONFIG_MXR_MAX_DESC` (hard cap) |
-| Size-class regions | no | yes (configurable) |
-| IRAM usage | IRAM tried first for 32BIT | DRAM first, IRAM as fallback |
-| Cross-region fallback | no | yes (opt-in, last resort) |
-| Heap tracing | `CONFIG_HEAP_TRACING` | not supported (disable it) |
-| Per-block heap overhead | 8 bytes | 0 bytes in arena |
+|Feature|Original ESP8266 heap|MxR-malloc|
+|-|-|-|
+|Metadata location|in-band (8 B/block)|out-of-band table (4 B/entry)|
+|Free-space structure|linked free list per region|sorted descriptors + optional bitmap|
+|Allocation search|O(N) list walk|O(N) gap scan or O(W) bitmap words|
+|Max allocations|memory-bound|`CONFIG\_MXR\_MAX\_DESC` (hard cap)|
+|Size-class regions|no|yes (configurable)|
+|IRAM usage|IRAM tried first for 32BIT|DRAM first, IRAM as fallback|
+|Cross-region fallback|no|yes (opt-in, last resort)|
+|Heap tracing|`CONFIG\_HEAP\_TRACING`|not supported (disable it)|
+|Per-block heap overhead|8 bytes|0 bytes in arena|
 
 ### Key behavioral differences
 
 1. **DRAM-first policy** — the original heap tries IRAM first for `32BIT`;
-   MxR keeps IRAM as a fallback to reduce IRAM fragmentation.
+MxR keeps IRAM as a fallback to reduce IRAM fragmentation.
 2. **Descriptor limit** — MxR has a hard cap on simultaneous allocations.
-   Monitor `alloc_fail_table_full` and raise `MXR_MAX_DESC` if needed.
+Monitor `alloc\_fail\_table\_full` and raise `MXR\_MAX\_DESC` if needed.
 3. **`realloc(ptr, 0)`** — frees the block and returns `NULL`
-   (configurable via `MXR_REALLOC_ZERO_FREES`).
+(configurable via `MXR\_REALLOC\_ZERO\_FREES`).
 
----
+\---
 
 ## Performance Considerations
 
 All allocation operations run under `vPortETSIntrLock()` (interrupts
-disabled). The hot path (`malloc`/`free`) is placed in **IRAM** by default.
+disabled). The hot path (`malloc`/`free`) is placed in **IRAM** by default;
+`calloc`/`zalloc`/`realloc` join them only when
+`CONFIG\_MXR\_IRAM\_PATH\_ALLOC\_FAMILY` is enabled.
 
 Worst-case latency per operation:
 
@@ -603,131 +623,143 @@ free:    O(log N) binary search + O(N) descriptor shift
 
 where N = number of active descriptors.
 
-| Scenario | Recommendation |
-|----------|---------------|
-| <= 256 active allocs | default settings are fine |
-| 256-1024 active allocs | enable `MXR_SEARCH_BITMAP` |
-| > 1024 active allocs | increase `MXR_MAX_DESC`, use bitmap |
-| IRAM is tight | enable `MXR_IRAM_HOT_PATH_DISABLED` |
+|Scenario|Recommendation|
+|-|-|
+|<= 256 active allocs|default settings are fine|
+|256-1024 active allocs|enable `MXR\_SEARCH\_BITMAP`|
+|> 1024 active allocs|increase `MXR\_MAX\_DESC`, use bitmap|
+|IRAM is tight|enable `MXR\_IRAM\_HOT\_PATH\_DISABLED`|
+|calloc/realloc during flash ops|enable `MXR\_IRAM\_PATH\_ALLOC\_FAMILY`|
 
----
+\---
 
 ## Diagnostics
 
 ```c
 typedef struct {
     bool     initialized;
-    uint8_t  region_count;
-    uint16_t desc_capacity;          /* CONFIG_MXR_MAX_DESC */
-    uint16_t active_allocs;          /* current descriptor count */
-    uint16_t max_active_allocs;      /* peak descriptor count */
-    size_t   total_bytes;            /* DRAM + IRAM total */
-    size_t   free_bytes;             /* DRAM + IRAM free */
-    size_t   min_free_bytes;         /* historical low watermark */
-    size_t   largest_free_block_bytes;
-    size_t   iram_total_bytes;
-    size_t   iram_free_bytes;
-    size_t   iram_min_free_bytes;
-    uint32_t exec_allocs;            /* EXEC allocations from IRAM */
-    uint32_t iram_fallback_allocs;   /* 32BIT fallback allocations to IRAM */
-    uint32_t cross_region_allocs;    /* cross-region DRAM fallback count */
-    uint32_t alloc_fail_no_memory;
-    uint32_t alloc_fail_table_full;
-    uint32_t invalid_free_attempts;  /* double-free / wild pointer */
-} mxr_status_t;
+    uint8\_t  region\_count;
+    uint16\_t desc\_capacity;          /\* CONFIG\_MXR\_MAX\_DESC \*/
+    uint16\_t active\_allocs;          /\* current descriptor count \*/
+    uint16\_t max\_active\_allocs;      /\* peak descriptor count \*/
+    size\_t   total\_bytes;            /\* DRAM + IRAM total \*/
+    size\_t   free\_bytes;             /\* DRAM + IRAM free \*/
+    size\_t   min\_free\_bytes;         /\* historical low watermark \*/
+    size\_t   largest\_free\_block\_bytes;
+    size\_t   iram\_total\_bytes;
+    size\_t   iram\_free\_bytes;
+    size\_t   iram\_min\_free\_bytes;
+    uint32\_t exec\_allocs;            /\* EXEC allocations from IRAM \*/
+    uint32\_t iram\_fallback\_allocs;   /\* 32BIT fallback allocations to IRAM \*/
+    uint32\_t cross\_region\_allocs;    /\* cross-region DRAM fallback count \*/
+    uint32\_t alloc\_fail\_no\_memory;
+    uint32\_t alloc\_fail\_table\_full;
+    uint32\_t invalid\_free\_attempts;  /\* double-free / wild pointer \*/
+} mxr\_status\_t;
 ```
 
-`mxr_dump()` prints the full arena state: totals, per-region statistics, IRAM
+`mxr\_dump()` prints the full arena state: totals, per-region statistics, IRAM
 state, fallback counters and every live descriptor.
 
----
+\---
 
 ## Project Structure
 
 ```text
-mxr_heap/
+mxr\_heap/
 |-- CMakeLists.txt          # build config + linker --wrap flags
 |-- Kconfig.projbuild       # menuconfig options
 |-- include/
-|   `-- mxr_malloc.h        # public API + descriptor helpers
-|-- mxr_malloc.c            # core allocator
-`-- mxr_heap_wrap.c         # linker --wrap integration (default mode)
+|   `-- mxr\_malloc.h        # public API + descriptor helpers
+|-- mxr\_malloc.c            # core allocator
+`-- mxr\_heap\_wrap.c         # linker --wrap integration (default mode)
 ```
 
-Alternative integration files (`mxr_heap_compat.c`, `mxr_heap_port.c`) are
+Alternative integration files (`mxr\_heap\_compat.c`, `mxr\_heap\_port.c`) are
 provided for replacement mode and must **never** be compiled together with the
 wrap layer.
 
----
+\---
 
 ## FAQ
 
-**Q: Why does `esp_get_free_heap_size()` differ from the original heap?**
+**Q: Why does `esp\_get\_free\_heap\_size()` differ from the original heap?**
 
 The original heap reports DRAM + IRAM and tries IRAM first. With
-`CONFIG_MXR_USE_IRAM=y`, MxR also reports DRAM + IRAM for `32BIT` queries.
-Compare apples-to-apples with `heap_caps_get_dram_free_size()` (DRAM only).
+`CONFIG\_MXR\_USE\_IRAM=y`, MxR also reports DRAM + IRAM for `32BIT` queries.
+Both `free` and `minimum free` queries subtract the IRAM EXEC reserve for
+non-EXEC requests, so the two numbers stay consistent. Compare
+apples-to-apples with `heap\_caps\_get\_dram\_free\_size()` (DRAM only).
 
-**Q: Can I use `CONFIG_HEAP_TRACING` with MxR?**
+**Q: Can I use `CONFIG\_HEAP\_TRACING` with MxR?**
 
 No. Disable it. A Kconfig warning is emitted if it is enabled.
 
 **Q: What happens if the descriptor table fills up?**
 
-`malloc` returns `NULL` and `alloc_fail_table_full` is incremented, even if
-memory is free. Increase `CONFIG_MXR_MAX_DESC`.
+`malloc` returns `NULL` and `alloc\_fail\_table\_full` is incremented, even if
+memory is free. Increase `CONFIG\_MXR\_MAX\_DESC`.
 
 **Q: Is MxR safe to call from ISRs?**
 
 No. Like the original ESP8266 heap, do not call `malloc`/`free` from
 interrupt handlers.
 
+**Q: Why aren't `calloc`/`realloc` in IRAM by default?**
+
+To keep the IRAM footprint small — only `malloc`/`free` are IRAM-resident by
+default. If you allocate from contexts that run while flash cache is disabled
+(e.g. flash-write callbacks), enable `CONFIG\_MXR\_IRAM\_PATH\_ALLOC\_FAMILY`, then
+check IRAM usage with `idf.py size`. Note: like the original heap, the
+allocator is still **not** ISR-safe.
+
 **Q: Can I use MxR on ESP32?**
 
-No. The memory map, linker symbols (`_bss_end`, `_iram_end`) and locking
+No. The memory map, linker symbols (`\_bss\_end`, `\_iram\_end`) and locking
 primitives are ESP8266-specific.
 
 **Q: How do I tune regions for my project?**
 
-Run with defaults, call `mxr_dump()`, and watch per-region utilization and
-`iram_fallback_allocs`. Adjust `MXR_REGION_SIZES` / `MXR_REGION_PERCENTS`
+Run with defaults, call `mxr\_dump()`, and watch per-region utilization and
+`iram\_fallback\_allocs`. Adjust `MXR\_REGION\_SIZES` / `MXR\_REGION\_PERCENTS`
 until fallbacks are rare and no region is starved.
 
 **Q: What is cross-region fallback?**
 
-When enabled (`CONFIG_MXR_CROSS_REGION_FALLBACK=y`), if a block's own
+When enabled (`CONFIG\_MXR\_CROSS\_REGION\_FALLBACK=y`), if a block's own
 size-class region and IRAM are both exhausted, the allocator tries other
-DRAM regions. It picks the region with the smallest `min_units` to minimize
+DRAM regions. It picks the region with the smallest `min\_units` to minimize
 fragmentation of large-block regions.
 
 Disabled by default because it causes fragmentation. Monitor
-`cross_region_allocs` — if it grows, increase the own region's percent in
-`MXR_REGION_PERCENTS` or adjust `MXR_REGION_SIZES`.
+`cross\_region\_allocs` — if it grows, increase the own region's percent in
+`MXR\_REGION\_PERCENTS` or adjust `MXR\_REGION\_SIZES`.
 
-**Q: What is `MXR_REALLOC_ZERO_FREES`?**
+**Q: What is `MXR\_REALLOC\_ZERO\_FREES`?**
 
 Controls `realloc(ptr, 0)` behavior:
 
-| Value | Behavior |
-|-------|----------|
-| `1` (default) | `free(ptr)`, return `NULL` (glibc / ESP-IDF style) |
-| `0` | allocate a minimal 4-byte block |
+|Value|Behavior|
+|-|-|
+|`1` (default)|`free(ptr)`, return `NULL` (glibc / ESP-IDF style)|
+|`0`|allocate a minimal 4-byte block|
 
-Define it in your project before including `mxr_malloc.h`:
+Define it in your project before including `mxr\_malloc.h`:
 
 ```c
-#define MXR_REALLOC_ZERO_FREES 0
-#include "mxr_malloc.h"
+#define MXR\_REALLOC\_ZERO\_FREES 0
+#include "mxr\_malloc.h"
 ```
 
----
+\---
 
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
----
+\---
 
 <p align="center">
   <sub>Built for ESP8266 · Xtensa LX106 · FreeRTOS</sub>
 </p>
+
