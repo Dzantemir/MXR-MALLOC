@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MxR-malloc — Descriptor Heap for ESP8266</title>
+  <title>MxR-malloc v2 — Descriptor Heap for ESP8266</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -1002,21 +1002,21 @@
     }
 
     .lane.l0.hit {
-      border-color: var(--mint);
-      box-shadow: 0 0 22px rgba(95, 214, 160, .12)
-    }
-
-    .lane.l0 .dot {
-      background: var(--mint)
-    }
-
-    .lane.l1.hit {
       border-color: var(--coral);
       box-shadow: 0 0 22px rgba(239, 111, 78, .12)
     }
 
-    .lane.l1 .dot {
+    .lane.l0 .dot {
       background: var(--coral)
+    }
+
+    .lane.l1.hit {
+      border-color: var(--mint);
+      box-shadow: 0 0 22px rgba(95, 214, 160, .12)
+    }
+
+    .lane.l1 .dot {
+      background: var(--mint)
     }
 
     .lane.l2.hit {
@@ -1101,17 +1101,17 @@
 
     .word {
       display: flex;
-      gap: 3px
+      gap: 2px
     }
 
     .bit {
       flex: 1;
-      aspect-ratio: .82;
+      aspect-ratio: 1.4;
       display: flex;
       align-items: center;
       justify-content: center;
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 9px;
       border: 1px solid var(--line);
       border-radius: 3px;
       color: var(--dim);
@@ -1160,7 +1160,7 @@
 
     .bitidx {
       display: flex;
-      gap: 3px;
+      gap: 2px;
       margin-top: 5px
     }
 
@@ -1168,7 +1168,7 @@
       flex: 1;
       text-align: center;
       font-family: var(--mono);
-      font-size: 8px;
+      font-size: 7px;
       color: var(--dim)
     }
 
@@ -1862,16 +1862,16 @@
   <!-- ======================= HERO ======================= -->
   <div class="hero">
     <div>
-      <div class="eyebrow">ESP8266 RTOS SDK v3.4 · <b>heap component</b> · linker --wrap drop-in</div>
+      <div class="eyebrow">ESP8266 RTOS SDK v3.4 · <b>v2 heap component</b> · linker --wrap drop-in</div>
       <h1>MxR<span class="cu">-</span>MALLOC<span class="hollow">Descriptor Heap Engine</span></h1>
       <p class="lead">A compact allocator that keeps all metadata in an <b>out-of-band descriptor table</b> —
         zero in-band headers, exact 4-byte alignment, size-class DRAM regions, an
-        <code>IRAM</code> fallback pool, and an opt-in <code>cross-region</code> last resort.
+        <b>IRAM-first</b> routing for 32BIT allocations, and an opt-in <code>cross-region</code> last resort.
       </p>
       <div class="chips">
-        <span class="chip">XTENSA LX106</span><span class="chip">4-BYTE UNITS</span>
-        <span class="chip">256 DESCRIPTORS</span><span class="chip">DRAM + IRAM</span>
-        <span class="chip">FIRST-FIT</span><span class="chip">CROSS-REGION OPT-IN</span>
+        <span class="chip">XTENSA LX106</span><span class="chip">8-BYTE DESCRIPTORS</span>
+        <span class="chip">256 DESCRIPTORS · 2 KB</span><span class="chip">DRAM + IRAM</span>
+        <span class="chip">IRAM-FIRST 32BIT</span><span class="chip">CROSS-REGION OPT-IN</span>
       </div>
       <div class="btnrow">
         <a class="btn solid" href="#how">See how it works ↓</a>
@@ -1884,16 +1884,16 @@
         <span>0x3FFE8000 → 0x40000000</span>
       </div>
       <div class="sim-b">
-        <div class="alabel"><span>DRAM · 3 SIZE-CLASS REGIONS</span><span>first-fit</span></div>
+        <div class="alabel"><span>DRAM · 3 SIZE-CLASS REGIONS</span><span>gap scan</span></div>
         <div class="arena" id="dramBar"></div>
-        <div class="alabel"><span>IRAM · EXEC + FALLBACK</span><span>exec→start · fallback→end</span></div>
+        <div class="alabel"><span>IRAM · EXEC + 32BIT</span><span>exec→start · 32bit→end</span></div>
         <div class="arena iram" id="iramBar">
           <div class="reserve" style="width:16.7%"></div>
         </div>
         <div class="legend">
           <span><i style="background:linear-gradient(180deg,#f0bd77,#c98f47)"></i>DRAM BLOCK</span>
           <span><i style="background:linear-gradient(180deg,#ff8a68,#cf5236)"></i>IRAM · EXEC</span>
-          <span><i style="background:linear-gradient(180deg,#7fe6b6,#3fae7e)"></i>IRAM · 32BIT FALLBACK</span>
+          <span><i style="background:linear-gradient(180deg,#7fe6b6,#3fae7e)"></i>IRAM · 32BIT (IRAM-first)</span>
           <span><i
               style="background:linear-gradient(180deg,#f0bd77,#c98f47);outline:1px dashed #ef6f4e;outline-offset:-1px"></i>CROSS-REGION
             (opt-in)</span>
@@ -1929,16 +1929,16 @@
   <div class="specs rv">
     <div class="specbar">
       <div class="sp">
-        <div class="v">131,072 B</div>
-        <div class="l">Max arena · 15-bit × 4 B units</div>
+        <div class="v">~2 GB</div>
+        <div class="l">Max arena · 31-bit byte offset</div>
       </div>
       <div class="sp">
         <div class="v">4 B</div>
         <div class="l">Alignment, both arenas</div>
       </div>
       <div class="sp">
-        <div class="v">1 KB</div>
-        <div class="l">Table @ 256 descriptors</div>
+        <div class="v">2 KB</div>
+        <div class="l">Table @ 256 descriptors (8 B each)</div>
       </div>
       <div class="sp">
         <div class="v">0 B</div>
@@ -1956,9 +1956,9 @@
       <div>
         <div class="kicker">Architecture</div>
         <h2>How the allocator thinks</h2>
-        <p class="sub">Every request is filtered by capability bits, routed to a size-class region in DRAM,
-          spills into IRAM when DRAM is exhausted, and — only if enabled — crosses into another DRAM region as a last
-          resort.</p>
+        <p class="sub">Every request is filtered by capability bits. EXEC and pure 32BIT land in IRAM first
+          (EXEC from start, 32BIT from end, reserve between them); only when IRAM is exhausted does the request
+          fall through to DRAM regions, and — only if enabled — cross into another DRAM region as a last resort.</p>
       </div>
     </div>
     <div class="flow rv">
@@ -1972,36 +1972,31 @@
         <div class="d">EXEC / DMA / 8BIT / 32BIT routing</div>
       </div>
       <div class="wire"></div>
-      <div class="node dram">
-        <div class="t">DRAM regions</div>
-        <div class="d">size-class first-fit + descriptor insert</div>
+      <div class="node iram">
+        <div class="t">IRAM</div>
+        <div class="d">EXEC from start · 32BIT from end (IRAM-first for MALLOC_CAP_32BIT)</div>
       </div>
       <div class="wire"></div>
-      <div class="node iram">
-        <div class="t">IRAM fallback</div>
-        <div class="d">only if DRAM failed &amp; reserve allows</div>
+      <div class="node dram">
+        <div class="t">DRAM regions</div>
+        <div class="d">size-class first-fit · tried after IRAM</div>
       </div>
       <div class="wire"></div>
       <div class="node dram">
         <div class="t">cross-region*</div>
-        <div class="d">*opt-in, after IRAM exhausted</div>
+        <div class="d">*opt-in, after IRAM + DRAM exhausted</div>
       </div>
     </div>
     <div class="flabel rv">▼ internal structure of one arena</div>
     <div class="flow rv">
       <div class="node">
         <div class="t">s_desc[]</div>
-        <div class="d">sorted 4-byte descriptors, binary search</div>
+        <div class="d">sorted 8-byte descriptors, binary search</div>
       </div>
       <div class="wire"></div>
       <div class="node">
         <div class="t">free space</div>
         <div class="d">implicit — gaps between descriptors</div>
-      </div>
-      <div class="wire"></div>
-      <div class="node">
-        <div class="t">bitmap (opt.)</div>
-        <div class="d">1 bit / unit, carved from arena end</div>
       </div>
       <div class="wire"></div>
       <div class="node">
@@ -2018,7 +2013,7 @@
         <h2>Two physical arenas</h2>
         <p class="sub">DRAM runs from <code>_bss_end</code> to <code>0x40000000</code> and is split into size-class
           regions.
-          IRAM starts after <code>_iram_end</code> — EXEC blocks grow from the start, fallback blocks from the end, with
+          IRAM starts after <code>_iram_end</code> — EXEC blocks grow from the start, 32BIT blocks from the end, with
           a reserve between.</p>
       </div>
     </div>
@@ -2026,25 +2021,22 @@
       <div class="mtitle">DRAM — <b>caps: 8BIT · 32BIT · DMA · INTERNAL</b></div>
       <div class="membar">
         <div class="seg fw hatch">.data / .bss</div>
-        <div class="seg r0">R0 · 4–128 B · 15%</div>
-        <div class="seg r1">R1 · 132–1020 B · 45%</div>
+        <div class="seg r0">R0 · 4–132 B · 15%</div>
+        <div class="seg r1">R1 · 132–1024 B · 45%</div>
         <div class="seg r2">R2 · 1024 B–∞ · 20% + rest</div>
-        <div class="seg bm">BITMAP*</div>
       </div>
-      <div class="addr"><span>0x3FFE8000</span><span>* only if CONFIG_MXR_SEARCH_BITMAP=y (carved from arena
-          end)</span><span>0x40000000</span></div>
+      <div class="addr"><span>0x3FFE8000</span><span></span><span>0x40000000</span></div>
     </div>
     <div class="memrow rv">
       <div class="mtitle">IRAM — <b>caps: 32BIT · EXEC</b></div>
       <div class="membar">
         <div class="seg code hatch">.iram.text (firmware code)</div>
-        <div class="seg ex">EXEC →</div>
-        <div class="seg free">free</div>
-        <div class="seg fbr">← 32BIT fallback</div>
+        <div class="seg ex">EXEC (from start) →</div>
         <div class="seg rsv">RESERVE</div>
+        <div class="seg free">free</div>
+        <div class="seg fbr">← 32BIT (IRAM-first, from end)</div>
       </div>
-      <div class="addr"><span>_iram_end</span><span>reserve protects EXEC from fallback (default 2048
-          B)</span><span>0x40100000 + SOC_IRAM_SIZE</span></div>
+      <div class="addr"><span>_iram_end</span><span>EXEC grows from start, 32BIT grows from end, reserve between them (default 2048 B)</span><span>0x40100000 + SOC_IRAM_SIZE</span></div>
     </div>
   </section>
   <!-- ======================= POLICY ======================= -->
@@ -2090,18 +2082,18 @@
       </div>
       <div class="ptbox">
         <h4>Routing result</h4>
-        <div class="lane l0" id="lane0"><span class="dot"></span><span class="n">DRAM REGIONS</span><span class="s"
-            id="lane0s">size-class first-fit</span></div>
-        <div class="lane l1" id="lane1"><span class="dot"></span><span class="n">IRAM</span><span class="s">EXEC from
-            start · fallback from end</span></div>
+        <div class="lane l0" id="lane0"><span class="dot"></span><span class="n">IRAM</span><span class="s"
+            id="lane0s">32BIT from end · EXEC from start</span></div>
+        <div class="lane l1" id="lane1"><span class="dot"></span><span class="n">DRAM REGIONS</span><span class="s" id="lane1s">size-class
+            first-fit (after IRAM)</span></div>
         <div class="lane l2" id="lane2"><span class="dot"></span><span class="n">CROSS-REGION</span><span
             class="s">other DRAM regions (opt-in)</span></div>
         <div class="lane l3" id="lane3"><span class="dot"></span><span class="n">NULL</span><span class="s">request
             rejected</span></div>
-        <div class="verdict v-dram" id="ptVerdict">DRAM · REGION 1</div>
-        <div class="why" id="ptWhy">size 480 B → 120 units → class 132–1020 B · DRAM first, IRAM fallback if exhausted
-        </div>
-        <div><span class="badge" id="ptBadge">+ IRAM FALLBACK ARMED</span></div>
+        <div class="verdict v-iram" id="ptVerdict">IRAM · 32BIT</div>
+        <div class="why" id="ptWhy">size 480 B · MALLOC_CAP_32BIT → IRAM first (from end, respect reserve) → DRAM
+          region Ri → cross-region (opt-in)</div>
+        <div><span class="badge" id="ptBadge">+ DRAM + CROSS-REGION ARMED</span></div>
       </div>
     </div>
     <div class="tblwrap rv" style="margin-top:26px">
@@ -2116,12 +2108,12 @@
         <tbody>
           <tr>
             <td><code>malloc / calloc / realloc / zalloc</code></td>
-            <td>DRAM → IRAM fallback</td>
-            <td>equivalent to <code>MALLOC_CAP_32BIT</code></td>
+            <td>IRAM first → DRAM → cross-region</td>
+            <td>matches original SDK behavior; frees DRAM for 8BIT/DMA consumers</td>
           </tr>
           <tr>
             <td><code>MALLOC_CAP_32BIT</code></td>
-            <td>DRAM → IRAM fallback</td>
+            <td>IRAM first → DRAM → cross-region</td>
             <td>fallback respects EXEC reserve</td>
           </tr>
           <tr>
@@ -2158,34 +2150,33 @@
     <div class="shead rv"><span class="idx">04</span>
       <div>
         <div class="kicker">Descriptor format</div>
-        <h2>Four bytes per allocation</h2>
-        <p class="sub">Each live block owns one 4-byte descriptor in a sorted table. Bit 15 of <code>off_flags</code>
+        <h2>Eight bytes per allocation</h2>
+        <p class="sub">Each live block owns one 8-byte descriptor in a sorted table. Bit 31 of <code>off_flags</code>
           marks the arena;
-          bit 15 of <code>len_flags</code> marks EXEC. Move the sliders — the bit pattern updates live.</p>
+          bit 31 of <code>len_flags</code> marks EXEC. Move the sliders — the bit pattern updates live.</p>
       </div>
     </div>
     <div class="desc rv">
       <div>
         <div class="wordrow">
-          <div class="wname">off_flags — arena + offset (4-byte units)</div>
+          <div class="wname">off_flags — arena + offset (bytes)</div>
           <div class="word w-off" id="wOff"></div>
           <div class="bitidx" id="iOff"></div>
         </div>
         <div class="wordrow">
-          <div class="wname">len_flags — exec + length−1 (4-byte units)</div>
+          <div class="wname">len_flags — exec + length (bytes)</div>
           <div class="word w-len" id="wLen"></div>
           <div class="bitidx" id="iLen"></div>
         </div>
-        <p style="color:var(--dim);font-size:13px;max-width:60ch">15-bit fields cover 32 768 units = <b
-            style="color:var(--mut)">131 072 bytes</b> —
-          enough for the entire ESP8266 DRAM. Because DRAM descriptors always sort before IRAM ones,
+        <p style="color:var(--dim);font-size:13px;max-width:60ch">31-bit fields cover ~2 GB per arena —
+          enough for any ESP8266 DRAM/IRAM configuration. Because DRAM descriptors always sort before IRAM ones,
           one binary search serves both arenas.</p>
       </div>
       <div class="dlab">
-        <label>OFFSET <input type="range" id="offR" min="0" max="32767" value="1284"><span class="val"
-            id="rOffV">1284</span></label>
-        <label>LENGTH <input type="range" id="lenR" min="1" max="32768" value="256"><span class="val"
-            id="rLenV">256</span></label>
+        <label>OFFSET <input type="range" id="offR" min="0" max="200000" value="5136"><span class="val"
+            id="rOffV">5136</span></label>
+        <label>LENGTH <input type="range" id="lenR" min="1" max="65536" value="1024"><span class="val"
+            id="rLenV">1024</span></label>
         <div class="tgl">
           <button class="capbtn" id="iramT">IRAM arena</button>
           <button class="capbtn" id="execT">EXEC block</button>
@@ -2193,15 +2184,15 @@
         <div class="readout">
           <div class="ro">
             <div class="l">Search key (hex)</div>
-            <div class="v" id="rKey">0x0504</div>
+            <div class="v" id="rKey">0x00001410</div>
           </div>
           <div class="ro">
             <div class="l">Resulting pointer</div>
-            <div class="v" id="rPtr">0x3FFEA010</div>
+            <div class="v" id="rPtr">0x3FFE9410</div>
           </div>
           <div class="ro" style="grid-column:1/-1">
-            <div class="l">Stored length−1 (binary)</div>
-            <div class="v" id="rLen">000000001111111</div>
+            <div class="l">Stored length (binary)</div>
+            <div class="v" id="rLen">0000000000000000000010000000000</div>
           </div>
         </div>
       </div>
@@ -2223,10 +2214,10 @@
       <div class="crow">
         <div><label>Lower boundaries, bytes</label><input id="inB" value="4,132,1024" spellcheck="false"></div>
         <div><label>Memory weights, %</label><input id="inP" value="15,45,20" spellcheck="false"></div>
-        <div><label>Arena size, KB</label><input id="inA" type="number" value="64" min="4" max="128"></div>
+        <div><label>Arena size, KB</label><input id="inA" type="number" value="64" min="4" max="2048"></div>
       </div>
       <div class="cbar" id="calcBar"></div>
-      <div class="addr"><span>0 units</span><span id="calcTotal"></span></div>
+      <div class="addr"><span>0 bytes</span><span id="calcTotal"></span></div>
       <div class="ctable" id="calcOut"></div>
     </div>
   </section>
@@ -2234,10 +2225,11 @@
   <section id="search">
     <div class="shead rv"><span class="idx">06</span>
       <div>
-        <div class="kicker">Search modes</div>
-        <h2>Descriptor scan vs bitmap</h2>
-        <p class="sub">Default mode walks gaps between sorted descriptors — zero extra RAM. Bitmap mode trades
-          ~2.5 KB (carved from the arena, sized to it) for word-at-a-time scanning. Watch the race:</p>
+        <div class="kicker">Search strategy</div>
+        <h2>Descriptor gap scan</h2>
+        <p class="sub">v2 removed the optional bitmap mode — the descriptor scan is fast enough for typical
+          embedded workloads and avoids carving bitmap memory out of the arena. The race below shows the scan in
+          action.</p>
       </div>
     </div>
     <div class="race rv">
@@ -2245,45 +2237,35 @@
         <div class="scanrow" id="scD"></div>
         <div class="ops" id="dOps">descriptor compares: 0</div>
       </div>
-      <div>
-        <div class="scanrow" id="scB"></div>
-        <div class="ops" id="bOps">bitmap words checked: 0</div>
-      </div>
     </div>
     <div class="tblwrap rv" style="margin-top:26px">
       <table>
         <thead>
           <tr>
-            <th></th>
-            <th>Descriptor gap search</th>
-            <th>Bitmap search</th>
+            <th>Characteristic</th>
+            <th>Descriptor gap scan (v2)</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>Extra RAM</td>
             <td><span class="yes">0 bytes</span></td>
-            <td>≈ arena/8 (2.5 KB @ 80 KB)</td>
           </tr>
           <tr>
             <td>Scan cost</td>
             <td>O(active descriptors)</td>
-            <td>O(arena units / 32) words</td>
           </tr>
           <tr>
             <td>Best when</td>
             <td>≤ 512 live allocations</td>
-            <td>heavy fragmentation, many small blocks</td>
           </tr>
           <tr>
             <td>Covers</td>
             <td>DRAM + IRAM</td>
-            <td>DRAM only — IRAM always uses descriptors</td>
           </tr>
           <tr>
             <td>Kconfig</td>
-            <td><code>CONFIG_MXR_SEARCH_DESCRIPTOR</code> (default)</td>
-            <td><code>CONFIG_MXR_SEARCH_BITMAP</code></td>
+            <td>(no option, always descriptor)</td>
           </tr>
         </tbody>
       </table>
@@ -2374,12 +2356,17 @@ void app_main(void)
           <tr>
             <td><span class="opt">MXR_MAX_DESC</span></td>
             <td>256</td>
-            <td>Max simultaneous allocations, shared by DRAM + IRAM. 1 KB table at 256.</td>
+            <td>Max simultaneous allocations, shared by DRAM + IRAM. 2 KB table at 256 (8 B per descriptor).</td>
+          </tr>
+          <tr>
+            <td><span class="opt">MXR_DESC_IN_DRAM / _IRAM_TEXT / _IRAM_BSS</span></td>
+            <td>DRAM</td>
+            <td>Descriptor table placement: DRAM <code>.bss</code> (default), IRAM <code>.iram0.text</code> (no patch, but the table is in the binary), or IRAM <code>.iram0.bss</code> (smaller binary, but requires a patched linker script).</td>
           </tr>
           <tr>
             <td><span class="opt">MXR_USE_IRAM</span></td>
             <td>y</td>
-            <td>Enable IRAM arena: EXEC allocations + 32BIT fallback pool.</td>
+            <td>Enable IRAM arena: EXEC allocations + IRAM-first pool for MALLOC_CAP_32BIT (matches original SDK).</td>
           </tr>
           <tr>
             <td><span class="opt">MXR_IRAM_RESERVE_BYTES</span></td>
@@ -2397,19 +2384,14 @@ void app_main(void)
             <td>Cross-region DRAM fallback (last resort, opt-in). Causes fragmentation of large-block regions.</td>
           </tr>
           <tr>
-            <td><span class="opt">MXR_CROSS_REGION_AFTER_IRAM</span></td>
-            <td>y</td>
-            <td>Cross-region only after IRAM is exhausted (recommended order).</td>
-          </tr>
-          <tr>
             <td><span class="opt">MXR_REGIONS</span></td>
             <td>3</td>
-            <td>Total DRAM regions; the last one is always unlimited.</td>
+            <td>Total DRAM regions (1..16); the last one is always unlimited.</td>
           </tr>
           <tr>
             <td><span class="opt">MXR_REGION_SIZES</span></td>
             <td>"4,132,1024"</td>
-            <td>Lower block-size boundaries in bytes, converted to 4-byte units.</td>
+            <td>Lower block-size boundaries in bytes.</td>
           </tr>
           <tr>
             <td><span class="opt">MXR_REGION_PERCENTS</span></td>
@@ -2417,9 +2399,19 @@ void app_main(void)
             <td>Memory weights; sum ≤ 100, leftover goes to the last region.</td>
           </tr>
           <tr>
-            <td><span class="opt">MXR_SEARCH_DESCRIPTOR / _BITMAP</span></td>
-            <td>descriptor</td>
-            <td>Free-block search mode.</td>
+            <td><span class="opt">MXR_COMPACT_TYPES</span></td>
+            <td>y</td>
+            <td>Use <code>uint16</code> for caps/min/max/alloc_count where possible (ESP8266). Disable for ESP32 or size classes > 64 KB.</td>
+          </tr>
+          <tr>
+            <td><span class="opt">MXR_DUMP_MINIMAL / _NORMAL / _FULL</span></td>
+            <td>NORMAL</td>
+            <td>Diagnostics output level: totals only / + regions and counters / + every descriptor.</td>
+          </tr>
+          <tr>
+            <td><span class="opt">MXR_REALLOC_ZERO_FREES</span> <span class="no">(header macro)</span></td>
+            <td>1</td>
+            <td><code>realloc(ptr, 0)</code> frees and returns NULL (glibc/ESP-IDF style). Set to 0 to allocate a minimal block.</td>
           </tr>
           <tr>
             <td><span class="opt">MXR_IRAM_HOT_PATH_DISABLED</span></td>
@@ -2525,7 +2517,7 @@ void   mxr_dump(void);</pre>
     </div>
     <div class="code rv">
       <div class="chead"><span>C — typical usage</span><button class="copy">COPY</button></div>
-      <pre data-lang="c">/* ordinary allocation: DRAM first, IRAM fallback if exhausted */
+      <pre data-lang="c">/* ordinary allocation: IRAM first (32BIT), DRAM if IRAM cannot fit */
 char *buf = malloc(1024);
 /* DMA-safe buffer: always DRAM, never IRAM */
 void *dma = heap_caps_malloc(512, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
@@ -2541,21 +2533,14 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
        (unsigned)st.invalid_free_attempts);</pre>
     </div>
     <div class="uart rv" id="uart">
-      <div class="ln"><span class="tg">I (231) mxr_malloc:</span> init ok: base=0x3ffe9a40 units=15432 bytes=61728</div>
-      <div class="ln"><span class="tg">I (234) mxr_malloc:</span> <span class="ir">IRAM heap ok: base=0x4010a1b0
-          units=4076 bytes=16304</span></div>
-      <div class="ln"><span class="tg">I (240) mxr_malloc:</span> MxR dump: initialized=1 · search mode: descriptor
-      </div>
-      <div class="ln"><span class="tg">I (246) mxr_malloc:</span> total=<span class="hl">78032</span> free=<span
-          class="hl">74120</span> min_free=73984 largest=45056</div>
-      <div class="ln"><span class="tg">I (252) mxr_malloc:</span> desc used=14/256 max_used=17 · exec=0 iram_fb=0
-        cross_region=0</div>
-      <div class="ln"><span class="tg">I (258) mxr_malloc:</span> region 0: start=0 total=2314 min=1 max=32 free=2314
-        alloc=6</div>
-      <div class="ln"><span class="tg">I (264) mxr_malloc:</span> region 1: start=2314 total=6944 min=33 max=255
-        free=6944 alloc=5</div>
-      <div class="ln"><span class="tg">I (270) mxr_malloc:</span> region 2: start=9258 total=6174 min=256 max=0
-        free=6174 alloc=3</div>
+      <div class="ln"><span class="tg">I (231) mxr_malloc:</span> init ok: base=0x3ffe9a40 bytes=61728 desc=DRAM(.bss) 2048 bytes</div>
+      <div class="ln"><span class="tg">I (234) mxr_malloc:</span> <span class="ir">IRAM heap ok: base=0x4010a1b0 bytes=16304</span></div>
+      <div class="ln"><span class="tg">I (240) mxr_malloc:</span> MxR dump: initialized=1 · search mode: descriptor (bytes)</div>
+      <div class="ln"><span class="tg">I (246) mxr_malloc:</span> total=<span class="hl">78032</span> free=<span class="hl">74120</span> min_free=73984 largest=45056</div>
+      <div class="ln"><span class="tg">I (252) mxr_malloc:</span> desc used=14/256 max_used=17 desc=DRAM 2048 bytes · exec=0 iram_fb=8 cross_region=0</div>
+      <div class="ln"><span class="tg">I (258) mxr_malloc:</span> region 0: start=0 total=9256 min=4 max=132 free=9256 alloc=6</div>
+      <div class="ln"><span class="tg">I (264) mxr_malloc:</span> region 1: start=9256 total=27776 min=132 max=1024 free=27776 alloc=5</div>
+      <div class="ln"><span class="tg">I (270) mxr_malloc:</span> region 2: start=37032 total=24696 min=1024 max=0 free=24696 alloc=3</div>
     </div>
   </section>
   <!-- ======================= COMPARISON ======================= -->
@@ -2579,17 +2564,17 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
           <tr>
             <td>Metadata location</td>
             <td>in-band, 8 B per block</td>
-            <td><span class="yes">out-of-band table, 4 B per entry</span></td>
+            <td><span class="yes">out-of-band table, 8 B per entry</span></td>
           </tr>
           <tr>
             <td>Free-space structure</td>
             <td>linked free list per region</td>
-            <td>sorted descriptors + optional bitmap</td>
+            <td>sorted descriptors (bitmap removed in v2)</td>
           </tr>
           <tr>
             <td>Allocation search</td>
             <td>O(N) list walk</td>
-            <td>O(N) gap scan or O(W) bitmap words</td>
+            <td>O(N) gap scan (descriptor only)</td>
           </tr>
           <tr>
             <td>Max simultaneous allocations</td>
@@ -2604,7 +2589,7 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
           <tr>
             <td>IRAM usage</td>
             <td>IRAM tried <b>first</b> for 32BIT</td>
-            <td><span class="yes">DRAM first, IRAM as fallback</span></td>
+            <td><span class="yes">IRAM first for 32BIT (matches original SDK)</span></td>
           </tr>
           <tr>
             <td>Cross-region fallback</td>
@@ -2646,10 +2631,9 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
     <div class="rv">
       <details>
         <summary>Why does esp_get_free_heap_size() differ from the original heap?</summary>
-        <div class="ans">The original heap reports DRAM + IRAM and tries IRAM first. MxR reports
-          <code>DRAM free + IRAM free</code> for 32BIT queries too, but keeps IRAM behind a reserve, so the number can
-          be slightly lower. Compare apples to apples with <code>heap_caps_get_dram_free_size()</code> — it returns DRAM
-          only in both implementations.
+        <div class="ans">v2 routes <code>MALLOC_CAP_32BIT</code> to IRAM first, matching the original SDK. The numbers
+          should now be close; remaining differences come from MxR's EXEC reserve and the descriptor-table cap. Compare
+          apples to apples with <code>heap_caps_get_dram_free_size()</code> — it returns DRAM only in both implementations.
         </div>
       </details>
       <details>
@@ -2664,8 +2648,9 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
         <summary>What is cross-region fallback and why is it off by default?</summary>
         <div class="ans">When <code>CONFIG_MXR_CROSS_REGION_FALLBACK=y</code>, if a block's own size-class region and
           IRAM are both exhausted, the allocator tries other DRAM regions, picking the one with the smallest
-          <code>min_units</code>. It's off by default because dropping a small block into a large-block region fragments
-          it. Watch <code>cross_region_allocs</code> — if it grows, enlarge the own region's percent instead.
+          <code>min_bytes</code>. It's off by default because dropping a small block into a large-block region fragments
+          it. v2 removed the <code>CONFIG_MXR_CROSS_REGION_AFTER_IRAM</code> toggle — order is now fixed: IRAM → DRAM →
+          cross-region. Watch <code>cross_region_allocs</code> — if it grows, enlarge the own region's percent instead.
         </div>
       </details>
       <details>
@@ -2699,6 +2684,23 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
         </div>
       </details>
       <details>
+        <summary>What changed between v1 and v2?</summary>
+        <div class="ans">v2 doubles the descriptor to 8 bytes (byte-granular offsets/lengths, ~2 GB max), routes
+          <code>MALLOC_CAP_32BIT</code> to IRAM first (matching the original SDK), removes the bitmap search mode,
+          adds configurable descriptor placement (DRAM/IRAM .text/IRAM .bss), adds compact type widths for ESP8266,
+          and adds a selectable diagnostics verbosity. <code>realloc(ptr, 0)</code> now follows glibc/ESP-IDF semantics
+          by default.
+        </div>
+      </details>
+      <details>
+        <summary>Where does the descriptor table live?</summary>
+        <div class="ans">Default is DRAM <code>.bss</code> (safest, no linker mods). For code that must allocate while
+          the flash cache is off, choose IRAM <code>.iram0.text</code> (no patch, but the table is in the binary) or
+          IRAM <code>.iram0.bss</code> (smaller binary, but requires patching <code>esp8266.project.ld.in</code> to add
+          the <code>*(.iram0.bss .iram0.bss.*)</code> wildcard).
+        </div>
+      </details>
+      <details>
         <summary>Will this work on ESP32?</summary>
         <div class="ans">No. The memory map (<code>_bss_end</code>, <code>_iram_end</code>, <code>0x40000000</code>),
           the locking primitive and the heap API are ESP8266-specific by design.</div>
@@ -2711,8 +2713,9 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       <div>
         <div class="fh">About</div>
         <p class="fabout">Compact descriptor-based memory allocator for ESP8266 RTOS SDK. Zero in-band overhead,
-          size-class DRAM regions, IRAM fallback, opt-in cross-region last resort, EXEC support, optional bitmap search,
-          configurable IRAM hot path scope.
+          size-class DRAM regions, IRAM-first routing for MALLOC_CAP_32BIT, opt-in cross-region last resort, EXEC support,
+          configurable descriptor placement (DRAM/IRAM .text/IRAM .bss), compact type widths, selectable diagnostics
+          verbosity, configurable IRAM hot path scope.
           Drop-in replacement via linker <code style="color:var(--copper2)">--wrap</code>.</p>
         <div class="fh" style="margin-top:26px">Topics</div>
         <div class="topics">
@@ -2744,7 +2747,7 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
         </div>
       </div>
     </div>
-    <div class="fbot">MIT License · built for ESP8266 · Xtensa LX106 · FreeRTOS · DRAM first, IRAM fallback,
+    <div class="fbot">MIT License · built for ESP8266 · Xtensa LX106 · FreeRTOS · IRAM-first 32BIT, DRAM regions,
       cross-region last</div>
   </footer>
   <script>
@@ -2786,11 +2789,11 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       }, { passive: true });
       /* ================= live arena simulator ================= */
       const SIM = {
-        dram: 208, iram: 48, reserve: 8, seq: 0, fb: 0, cross: 0, blocks: new Map(),
-        regs: [{ lo: 0, hi: 32, min: 1, max: 8 }, { lo: 32, hi: 124, min: 9, max: 23 }, { lo: 124, hi: 208, min: 24, max: 9999 }]
+        dram: 20800, iram: 4800, reserve: 800, seq: 0, fb: 0, cross: 0, blocks: new Map(),
+        regs: [{ lo: 0, hi: 3200, min: 4, max: 128 }, { lo: 3200, hi: 12400, min: 132, max: 1020 }, { lo: 12400, hi: 20800, min: 1024, max: 99999 }]
       };
       const dramBar = $('#dramBar'), iramBar = $('#iramBar');
-      [[32, 'R0|R1'], [124, 'R1|R2']].forEach(([u, lbl]) => {
+      [[3200, 'R0|R1'], [12400, 'R1|R2']].forEach(([u, lbl]) => {
         const t = document.createElement('div'); t.className = 'tick'; t.style.left = (u / SIM.dram * 100) + '%'; dramBar.appendChild(t);
         const l = document.createElement('div'); l.className = 'ticklbl'; l.style.left = (u / SIM.dram * 100) + '%'; l.textContent = lbl.split('|')[1]; dramBar.appendChild(l);
       });
@@ -2827,24 +2830,27 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       function simAlloc() {
         if (SIM.blocks.size > 42) { simFree(); return }
         const r = Math.random(); let units, exec = false;
-        if (r < .07) { exec = true; units = 2 + (Math.random() * 9 | 0) }
-        else { const s = Math.random(); units = s < .66 ? 1 + (Math.random() * 8 | 0) : s < .92 ? 9 + (Math.random() * 15 | 0) : 24 + (Math.random() * 28 | 0) }
+        if (r < .07) { exec = true; units = 8 + (Math.random() * 36 | 0) }
+        else { const s = Math.random(); units = s < .66 ? 4 + (Math.random() * 32 | 0) : s < .92 ? 36 + (Math.random() * 60 | 0) : 96 + (Math.random() * 112 | 0) }
         let placed = null;
         if (exec) { const off = gap('iram', 0, SIM.iram, units, false); if (off >= 0) { placed = { off, len: units, arena: 'iram', exec: true } } }
         else {
-          const g = SIM.regs.find(g => units >= g.min && units <= g.max);
-          if (g) { const off = gap('dram', g.lo, g.hi, units, false); if (off >= 0) placed = { off, len: units, arena: 'dram' } }
-          /* IRAM fallback (respects reserve) */
-          if (!placed && SIM.iram - used('iram') - units >= SIM.reserve) {
+          /* IRAM first (from end, respects reserve) — IRAM-first for MALLOC_CAP_32BIT */
+          if (SIM.iram - used('iram') - units >= SIM.reserve) {
             const off = gap('iram', 0, SIM.iram, units, true);
             if (off >= 0) { placed = { off, len: units, arena: 'iram', fb: true }; SIM.fb++ }
           }
-          /* cross-region fallback: last resort, try other DRAM regions (opt-in) */
+          /* DRAM own region (tried after IRAM) */
           if (!placed) {
-            for (const g2 of SIM.regs) {
-              if (g2 === g) continue;
-              const off2 = gap('dram', g2.lo, g2.hi, units, false);
-              if (off2 >= 0) { placed = { off: off2, len: units, arena: 'dram', cross: true }; SIM.cross++; break }
+            const g = SIM.regs.find(g => units >= g.min && units <= g.max);
+            if (g) { const off = gap('dram', g.lo, g.hi, units, false); if (off >= 0) placed = { off, len: units, arena: 'dram' } }
+            /* cross-region fallback: last resort, try other DRAM regions (opt-in) */
+            if (!placed) {
+              for (const g2 of SIM.regs) {
+                if (g2 === g) continue;
+                const off2 = gap('dram', g2.lo, g2.hi, units, false);
+                if (off2 >= 0) { placed = { off: off2, len: units, arena: 'dram', cross: true }; SIM.cross++; break }
+              }
             }
           }
         }
@@ -2852,8 +2858,8 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
         placed.id = ++SIM.seq; SIM.blocks.set(placed.id, placed); renderB(placed, true);
       }
       function simStats() {
-        $('#stDram').textContent = ((SIM.dram - used('dram')) * 4).toLocaleString('en') + ' B';
-        $('#stIram').textContent = ((SIM.iram - used('iram')) * 4).toLocaleString('en') + ' B';
+        $('#stDram').textContent = (SIM.dram - used('dram')).toLocaleString('en') + ' B';
+        $('#stIram').textContent = (SIM.iram - used('iram')).toLocaleString('en') + ' B';
         $('#stAct').textContent = SIM.blocks.size;
         $('#stFb').textContent = SIM.fb;
         $('#stCross').textContent = SIM.cross;
@@ -2874,32 +2880,30 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       function decide() {
         const size = +sizeIn.value;
         let c = caps; if (c === 0) c = CAP.S32;
-        const u = Math.ceil(size / 4);
         const hit = i => { const el = $('#lane' + i); if (el) el.classList.add('hit') };
         const arm = i => { const el = $('#lane' + i); if (el) el.classList.add('armed') };
         [0, 1, 2, 3].forEach(i => { const el = $('#lane' + i); if (el) el.classList.remove('hit', 'armed') });
         let v, cls, why, badge;
+        const ri = size <= 128 ? 0 : size <= 1024 ? 1 : 2;
+        const ranges = ['4–132 B', '132–1024 B', '1024 B – ∞'];
         if (c & CAP.SPIRAM) {
           hit(3); v = 'NULL'; cls = 'v-null';
           why = 'MALLOC_CAP_SPIRAM — ESP8266 has no SPIRAM; request rejected';
           badge = 'REJECTED';
         } else if (c & CAP.EXEC) {
           if (c & (CAP.DMA | CAP.S8)) { hit(3); v = 'NULL'; cls = 'v-null'; why = 'EXEC cannot be combined with DMA or 8BIT — no such memory exists'; badge = 'REJECTED'; }
-          else { hit(1); v = 'IRAM'; cls = 'v-iram'; why = 'executable memory lives only in IRAM · allocated from IRAM start · ignores reserve'; badge = 'EXEC · IRAM ONLY'; }
+          else { hit(0); v = 'IRAM · EXEC'; cls = 'v-iram'; why = 'executable memory lives only in IRAM · allocated from IRAM start · ignores reserve'; badge = 'EXEC · IRAM ONLY'; }
+        } else if (c & (CAP.DMA | CAP.S8)) {
+          hit(1); v = 'DRAM · REGION ' + ri; cls = 'v-dram';
+          $('#lane1s').textContent = 'region ' + ri + ' · ' + ranges[ri];
+          why = 'size ' + size + ' B · size class ' + ranges[ri] + ' · DMA/8BIT memory never goes to IRAM';
+          badge = 'DRAM ONLY';
         } else {
-          const ri = u <= 32 ? 0 : u <= 255 ? 1 : 2;
-          const ranges = ['4–128 B', '132–1020 B', '1024 B – ∞'];
-          const fb = !(c & (CAP.DMA | CAP.S8));
-          hit(0); v = 'DRAM · REGION ' + ri; cls = 'v-dram';
-          $('#lane0s').textContent = 'region ' + ri + ' · ' + ranges[ri];
-          if (fb) {
-            arm(1); arm(2);
-            why = 'size ' + size + ' B → ' + u + ' units → size class ' + ranges[ri] + ' · DRAM → IRAM fallback → cross-region (opt-in)';
-            badge = 'FALLBACK: IRAM → CROSS-REGION';
-          } else {
-            why = 'size ' + size + ' B → ' + u + ' units → size class ' + ranges[ri] + ' · DMA/8BIT memory never falls back to IRAM';
-            badge = 'DRAM ONLY';
-          }
+          hit(0); v = 'IRAM · 32BIT'; cls = 'v-iram';
+          arm(1); arm(2);
+          $('#lane1s').textContent = 'region ' + ri + ' · ' + ranges[ri] + ' (fallback)';
+          why = 'size ' + size + ' B · MALLOC_CAP_32BIT → IRAM first (from end, respect reserve) → DRAM region Ri → cross-region (opt-in)';
+          badge = 'FALLBACK: DRAM → CROSS-REGION';
         }
         const vd = $('#ptVerdict'); vd.textContent = v; vd.className = 'verdict ' + cls;
         $('#ptWhy').textContent = why; $('#ptBadge').textContent = badge;
@@ -2907,9 +2911,9 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       decide();
       /* ================= descriptor lab ================= */
       function buildWord(el, idx) {
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < 32; i++) {
           const d = document.createElement('div'); d.className = 'bit' + (i === 0 ? ' flag' : ''); el.appendChild(d);
-          const s = document.createElement('span'); s.textContent = 15 - i; idx.appendChild(s);
+          const s = document.createElement('span'); s.textContent = 31 - i; idx.appendChild(s);
         }
       }
       buildWord($('#wOff'), $('#iOff')); buildWord($('#wLen'), $('#iLen'));
@@ -2917,16 +2921,16 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       [['#iramT', v => iramOn = v], ['#execT', v => execOn = v]].forEach(([id, fn]) => {
         $(id).addEventListener('click', e => { fn(!e.target.classList.contains('on')); e.target.classList.toggle('on'); updDesc() });
       });
-      function drawWord(el, v) { [...el.children].forEach((c, i) => { const b = (v >> (15 - i)) & 1; c.textContent = b; c.classList.toggle('on', !!b) }) }
+      function drawWord(el, v) { v = v >>> 0; [...el.children].forEach((c, i) => { const b = (v >>> (31 - i)) & 1; c.textContent = b; c.classList.toggle('on', !!b) }) }
       function updDesc() {
         const off = +$('#offR').value, len = +$('#lenR').value;
-        const of = off | (iramOn ? 0x8000 : 0), lf = (len - 1) | (execOn ? 0x8000 : 0);
+        const of = (off | (iramOn ? 0x80000000 : 0)) >>> 0, lf = (len | (execOn ? 0x80000000 : 0)) >>> 0;
         drawWord($('#wOff'), of); drawWord($('#wLen'), lf);
         $('#rOffV').textContent = off; $('#rLenV').textContent = len;
-        $('#rKey').textContent = '0x' + of.toString(16).toUpperCase().padStart(4, '0');
-        $('#rLen').textContent = (len - 1).toString(2).padStart(15, '0');
+        $('#rKey').textContent = '0x' + of.toString(16).toUpperCase().padStart(8, '0');
+        $('#rLen').textContent = len.toString(2).padStart(31, '0');
         const base = iramOn ? 0x4010A000 : 0x3FFE8000;
-        $('#rPtr').textContent = '0x' + (base + off * 4).toString(16).toUpperCase();
+        $('#rPtr').textContent = '0x' + (base + off).toString(16).toUpperCase();
       }
       $('#offR').addEventListener('input', updDesc); $('#lenR').addEventListener('input', updDesc);
       updDesc();
@@ -2935,54 +2939,46 @@ printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
       function calc() {
         const parse = v => v.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
         const b = parse($('#inB').value), p = parse($('#inP').value);
-        const arenaU = Math.round((+$('#inA').value || 64) * 1024 / 4);
+        const arenaB = Math.round((+$('#inA').value || 64) * 1024);
         const out = $('#calcOut'), bar = $('#calcBar');
         const fail = m => { out.innerHTML = '<div class="cerr">✗ ' + m + '</div>'; bar.innerHTML = ''; $('#calcTotal').textContent = '' };
         if (b.length < 2 || b.length > 16) return fail('need 2–16 boundaries');
         if (p.length !== b.length) return fail('percent count (' + p.length + ') ≠ boundary count (' + b.length + ')');
         if (p.some(x => x < 0 || x > 100) || p.reduce((a, c) => a + c, 0) > 100) return fail('percents must be 0–100 with sum ≤ 100');
-        const u = b.map(x => Math.max(1, Math.ceil(Math.min(x, 131072) / 4)));
-        for (let i = 1; i < u.length; i++)if (u[i] <= u[i - 1]) return fail('boundaries must be strictly increasing after 4-byte conversion');
-        let rem = arenaU; const rows = [];
+        const u = b.map(x => Math.max(1, Math.min(x, 2147483647)));
+        for (let i = 1; i < u.length; i++)if (u[i] <= u[i - 1]) return fail('boundaries must be strictly increasing');
+        let rem = arenaB; const rows = [];
         for (let i = 0; i < u.length; i++) {
-          let units = (arenaU * p[i] / 100) | 0;
-          if (i === u.length - 1 && p[i] === 0) units = rem;
-          if (units < u[i]) units = u[i];
-          if (units > rem) return fail('region ' + i + ' needs ' + units + ' units, only ' + rem + ' left — shrink percents or enlarge arena');
-          rem -= units; rows.push({ min: u[i], max: i < u.length - 1 ? u[i + 1] - 1 : 0, units });
+          let bytes = (arenaB * p[i] / 100) | 0;
+          if (i === u.length - 1 && p[i] === 0) bytes = rem;
+          if (bytes < u[i]) bytes = u[i];
+          if (bytes > rem) return fail('region ' + i + ' needs ' + bytes + ' bytes, only ' + rem + ' left — shrink percents or enlarge arena');
+          rem -= bytes; rows.push({ min: u[i], max: i < u.length - 1 ? u[i + 1] - 1 : 0, bytes });
         }
-        if (rem > 0) rows[rows.length - 1].units += rem;
-        bar.innerHTML = rows.map((r, i) => '<div class="cseg" style="width:' + (r.units / arenaU * 100) + '%;background:' + CPAL[i % CPAL.length] + '">R' + i + '</div>').join('');
-        $('#calcTotal').textContent = arenaU.toLocaleString('en') + ' units · ' + (arenaU * 4).toLocaleString('en') + ' B';
-        out.innerHTML = '<div class="tblwrap"><table><thead><tr><th>#</th><th>Accepts blocks</th><th>min/max units</th><th>Memory</th></tr></thead><tbody>' +
-          rows.map((r, i) => '<tr><td>R' + i + '</td><td><code>' + (r.min * 4).toLocaleString('en') + ' – ' + (r.max ? (r.max * 4).toLocaleString('en') + ' B' : '∞ (unlimited)') + '</code></td>' +
-            '<td>' + r.min + ' / ' + (r.max || '∞') + '</td><td>' + r.units.toLocaleString('en') + ' u · <b style="color:var(--copper2)">' + (r.units * 4).toLocaleString('en') + ' B</b> (' + (r.units / arenaU * 100).toFixed(1) + '%)</td></tr>').join('') +
+        if (rem > 0) rows[rows.length - 1].bytes += rem;
+        bar.innerHTML = rows.map((r, i) => '<div class="cseg" style="width:' + (r.bytes / arenaB * 100) + '%;background:' + CPAL[i % CPAL.length] + '">R' + i + '</div>').join('');
+        $('#calcTotal').textContent = arenaB.toLocaleString('en') + ' B';
+        out.innerHTML = '<div class="tblwrap"><table><thead><tr><th>#</th><th>Accepts blocks</th><th>min/max bytes</th><th>Memory</th></tr></thead><tbody>' +
+          rows.map((r, i) => '<tr><td>R' + i + '</td><td><code>' + r.min.toLocaleString('en') + ' – ' + (r.max ? r.max.toLocaleString('en') + ' B' : '∞ (unlimited)') + '</code></td>' +
+            '<td>' + r.min + ' / ' + (r.max || '∞') + '</td><td>' + r.bytes.toLocaleString('en') + ' B (' + (r.bytes / arenaB * 100).toFixed(1) + '%)</td></tr>').join('') +
           '</tbody></table></div>';
       }
       ['#inB', '#inP', '#inA'].forEach(id => $(id).addEventListener('input', calc));
       calc();
       /* ================= scan race ================= */
-      const scD = $('#scD'), scB = $('#scB');
+      const scD = $('#scD');
       const mk = (n, parent, tag) => {
         const t = document.createElement('span'); t.className = 'tag'; t.textContent = tag; parent.appendChild(t);
         const cells = []; for (let i = 0; i < n; i++) { const d = document.createElement('div'); d.className = 'scell'; parent.appendChild(d); cells.push(d) } return cells
       };
-      const dCells = mk(14, scD, 'descriptor'), bCells = mk(8, scB, 'bitmap');
-      let di = 0, bi = 0; const DT = 9, BT = 6;
+      const dCells = mk(14, scD, 'descriptor');
+      let di = 0; const DT = 9;
       setInterval(() => {
         dCells.forEach(c => c.classList.remove('cur', 'hit', 'dim'));
         if (di > DT) { dCells[DT].classList.add('hit'); $('#dOps').innerHTML = 'gap found @ descriptor ' + DT + ' — <b>' + (DT + 1) + ' compares</b>'; di = 0 }
         else {
           for (let k = 0; k < di; k++)dCells[k].classList.add('dim'); dCells[di].classList.add('cur');
           $('#dOps').innerHTML = 'descriptor compares: <b>' + (di + 1) + '</b>'; di++
-        }
-      }, 380);
-      setInterval(() => {
-        bCells.forEach(c => c.classList.remove('cur', 'hit', 'dim'));
-        if (bi > BT) { bCells[BT].classList.add('hit'); $('#bOps').innerHTML = 'free run found — <b>' + ((BT >> 1) + 1) + ' words checked</b>'; bi = 0 }
-        else {
-          for (let k = 0; k < bi; k += 2)bCells[k].classList.add('dim'); bCells[bi].classList.add('cur');
-          $('#bOps').innerHTML = 'bitmap words checked: <b>' + ((bi >> 1) + 1) + '</b>'; bi += 2
         }
       }, 380);
     })();
