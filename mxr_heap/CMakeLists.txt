@@ -10,11 +10,9 @@ idf_component_register(
         log
         newlib
         freertos
+        esp8266
 )
 
-# ============================================================
-#  Compatibility warning
-# ============================================================
 
 if(CONFIG_MXR_WARN_HEAP_TRACING AND CONFIG_HEAP_TRACING)
     message(WARNING
@@ -24,10 +22,6 @@ if(CONFIG_MXR_WARN_HEAP_TRACING AND CONFIG_HEAP_TRACING)
     )
 endif()
 
-# ============================================================
-#  Base wraps
-# ============================================================
-
 set(MXR_WRAP_FLAGS
     "-Wl,--wrap=heap_caps_init"
     "-Wl,--wrap=_heap_caps_malloc"
@@ -36,10 +30,6 @@ set(MXR_WRAP_FLAGS
     "-Wl,--wrap=_heap_caps_calloc"
     "-Wl,--wrap=_heap_caps_zalloc"
 )
-
-# ============================================================
-#  Optional wraps
-# ============================================================
 
 if(CONFIG_MXR_WRAP_HEAP_QUERY)
     list(APPEND MXR_WRAP_FLAGS
@@ -73,9 +63,5 @@ if(CONFIG_MXR_WRAP_LIBC)
         "-Wl,--wrap=zalloc"
     )
 endif()
-
-# ============================================================
-#  Apply linker flags
-# ============================================================
 
 target_link_libraries(${COMPONENT_LIB} INTERFACE ${MXR_WRAP_FLAGS})
