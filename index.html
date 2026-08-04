@@ -4,2984 +4,1845 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MxR-malloc v2 — Descriptor Heap for ESP8266</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <title>MxR-Malloc Simulator</title>
   <style>
-    :root {
-      --bg0: #081711;
-      --panel: #0f2a1e;
-      --panel2: #133226;
-      --line: #1c4634;
-      --line2: #2c614a;
-      --ink: #dcefe2;
-      --mut: #8fb4a0;
-      --dim: #5d8271;
-      --copper: #e2a45c;
-      --copper2: #f4c67f;
-      --copper3: #b97f3e;
-      --mint: #5fd6a0;
-      --coral: #ef6f4e;
-      --sky: #79b8d8;
-      --disp: 'Big Shoulders Display', sans-serif;
-      --body: 'IBM Plex Sans', sans-serif;
-      --mono: 'IBM Plex Mono', monospace;
-    }
-
-    * {
+    *,
+    *::before,
+    *::after {
       margin: 0;
       padding: 0;
-      box-sizing: border-box
+      box-sizing: border-box;
     }
 
-    html {
-      scroll-behavior: smooth;
-      scroll-padding-top: 76px
+    :root {
+      --bg: #f4f6f9;
+      --card: #fff;
+      --border: #e0e4ea;
+      --text: #1e293b;
+      --muted: #64748b;
+      --accent: #4f6ef7;
+      --radius: 10px;
     }
 
     body {
-      font-family: var(--body);
-      color: var(--ink);
-      background: var(--bg0);
-      line-height: 1.6;
-      overflow-x: hidden
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      line-height: 1.5;
     }
 
-    ::selection {
-      background: var(--copper);
-      color: #1a1206
-    }
-
-    /* ---------- ambient background ---------- */
-    .bg {
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      overflow: hidden;
-      background:
-        radial-gradient(900px 620px at 88% -8%, rgba(226, 164, 92, .08), transparent 62%),
-        radial-gradient(760px 520px at -8% 34%, rgba(95, 214, 160, .06), transparent 60%),
-        radial-gradient(700px 500px at 60% 110%, rgba(121, 184, 216, .05), transparent 60%),
-        linear-gradient(180deg, #0a1d14, #081711 45%, #0a1e15)
-    }
-
-    .bg .grid {
-      position: absolute;
-      inset: 0;
-      opacity: .55;
-      background-image: linear-gradient(rgba(127, 180, 150, .05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(127, 180, 150, .05) 1px, transparent 1px);
-      background-size: 38px 38px
-    }
-
-    .bg svg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%
-    }
-
-    .trace {
-      fill: none;
-      stroke-width: 1.5;
-      stroke-dasharray: 5 10;
-      animation: dash 26s linear infinite
-    }
-
-    @keyframes dash {
-      to {
-        stroke-dashoffset: -300
-      }
-    }
-
-    .pad {
-      animation: padpulse 4s ease-in-out infinite
-    }
-
-    @keyframes padpulse {
-
-      0%,
-      100% {
-        opacity: .25
-      }
-
-      50% {
-        opacity: .7
-      }
-    }
-
-    /* ---------- topbar ---------- */
-    .top {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      display: flex;
-      align-items: center;
-      gap: 26px;
-      padding: 13px 30px;
-      background: rgba(8, 23, 17, .94);
-      border-bottom: 1px solid var(--line)
-    }
-
-    .mark {
-      font-family: var(--disp);
-      font-weight: 800;
-      font-size: 21px;
-      letter-spacing: .04em;
-      color: var(--copper2);
-      border: 1px solid var(--line2);
-      padding: 3px 11px;
-      border-radius: 4px;
-      background: linear-gradient(180deg, rgba(226, 164, 92, .14), transparent);
-      white-space: nowrap
-    }
-
-    .mark small {
-      font-family: var(--mono);
-      font-size: 9px;
-      color: var(--dim);
-      letter-spacing: .14em;
-      display: block;
-      line-height: 1
-    }
-
-    nav {
-      display: flex;
-      gap: 20px;
-      margin-left: auto;
-      overflow-x: auto
-    }
-
-    nav a {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: .14em;
-      color: var(--mut);
-      text-decoration: none;
-      text-transform: uppercase;
-      padding: 4px 0;
-      border-bottom: 1px solid transparent;
-      transition: .25s;
-      white-space: nowrap
-    }
-
-    nav a:hover {
-      color: var(--copper2)
-    }
-
-    nav a.cur {
-      color: var(--copper2);
-      border-bottom-color: var(--copper)
-    }
-
-    .tchip {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .1em;
-      color: var(--mint);
-      border: 1px solid var(--line);
-      padding: 4px 9px;
-      border-radius: 3px;
-      white-space: nowrap
-    }
-
-    .progress {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 2px;
-      background: var(--copper);
-      z-index: 60;
-      width: 0;
-      box-shadow: 0 0 8px rgba(226, 164, 92, .7)
-    }
-
-    /* ---------- hero ---------- */
-    .hero {
-      display: grid;
-      grid-template-columns: 1.02fr .98fr;
-      gap: 52px;
-      align-items: center;
-      max-width: 1300px;
+    .container {
+      max-width: 1460px;
       margin: 0 auto;
-      padding: 74px 30px 34px
-    }
-
-    .eyebrow {
-      font-family: var(--mono);
-      font-size: 11px;
-      letter-spacing: .22em;
-      color: var(--mint);
-      text-transform: uppercase;
-      margin-bottom: 18px
-    }
-
-    .eyebrow b {
-      color: var(--copper2);
-      font-weight: 500
     }
 
     h1 {
-      font-family: var(--disp);
+      text-align: center;
+      font-size: 1.7rem;
       font-weight: 800;
-      text-transform: uppercase;
-      line-height: .9;
-      font-size: clamp(58px, 8.4vw, 106px);
-      letter-spacing: .01em
+      margin-bottom: 2px;
     }
 
-    h1 .hollow {
-      display: block;
-      color: transparent;
-      -webkit-text-stroke: 1.5px var(--line2);
-      font-size: .62em;
-      letter-spacing: .06em;
-      margin-top: 6px
+    .subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: .82rem;
+      margin-bottom: 16px;
     }
 
-    h1 .cu {
-      color: var(--copper)
-    }
-
-    .lead {
-      color: var(--mut);
-      font-size: 16.5px;
-      max-width: 52ch;
-      margin: 22px 0 26px
-    }
-
-    .lead code {
-      font-family: var(--mono);
-      font-size: .86em;
-      color: var(--copper2)
-    }
-
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 9px;
-      margin-bottom: 30px
-    }
-
-    .chip {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: .1em;
-      color: var(--mut);
-      border: 1px solid var(--line);
-      padding: 6px 11px;
-      border-radius: 3px;
-      transition: .25s;
-      cursor: default
-    }
-
-    .chip:hover {
-      border-color: var(--copper);
-      color: var(--copper2);
-      transform: translateY(-2px)
-    }
-
-    .btnrow {
-      display: flex;
+    .layout {
+      display: grid;
+      grid-template-columns: 290px 1fr;
       gap: 14px;
-      flex-wrap: wrap
+    }
+
+    @media(max-width:1000px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+    }
+
+    .card-title {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sg {
+      margin-bottom: 9px;
+    }
+
+    .sg label {
+      display: block;
+      font-size: .68rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .sg input,
+    .sg select {
+      width: 100%;
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: .76rem;
+      background: #f8f9fb;
+      color: var(--text);
+      outline: none;
+    }
+
+    .sg input:focus,
+    .sg select:focus {
+      border-color: var(--accent);
+    }
+
+    .sg input:disabled,
+    .sg select:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    .cbx {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 7px;
+      font-size: .74rem;
+      cursor: pointer;
+    }
+
+    .cbx input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+    }
+
+    .cbx input:disabled+span {
+      opacity: .45;
     }
 
     .btn {
-      font-family: var(--mono);
-      font-size: 12px;
-      letter-spacing: .14em;
-      text-transform: uppercase;
-      text-decoration: none;
-      padding: 13px 24px;
-      border-radius: 4px;
-      transition: .25s;
-      cursor: pointer;
-      border: 1px solid var(--copper)
-    }
-
-    .btn.solid {
-      background: var(--copper);
-      color: #1a1206;
-      font-weight: 500
-    }
-
-    .btn.solid:hover {
-      background: var(--copper2);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(226, 164, 92, .25)
-    }
-
-    .btn.ghost {
-      color: var(--copper2)
-    }
-
-    .btn.ghost:hover {
-      background: rgba(226, 164, 92, .1);
-      transform: translateY(-2px)
-    }
-
-    /* ---------- simulator ---------- */
-    .sim {
-      border: 1px solid var(--line2);
-      border-radius: 8px;
-      overflow: hidden;
-      background: linear-gradient(180deg, var(--panel2), var(--panel));
-      box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
-      transition: border-color .3s
-    }
-
-    .sim.fail {
-      border-color: var(--coral)
-    }
-
-    .sim-h {
-      display: flex;
+      display: inline-flex;
       align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 7px 13px;
+      border: none;
+      border-radius: 7px;
+      font-size: .74rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: .15s;
+    }
+
+    .btn:active {
+      transform: scale(.96);
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .btn-g {
+      background: #10b981;
+      color: #fff;
+    }
+
+    .btn-g:hover:not(:disabled) {
+      background: #059669;
+    }
+
+    .btn-r {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .btn-r:hover:not(:disabled) {
+      background: #dc2626;
+    }
+
+    .btn-b {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-b:hover:not(:disabled) {
+      background: #3b5de7;
+    }
+
+    .btn-p {
+      background: #8b5cf6;
+      color: #fff;
+    }
+
+    .btn-p:hover:not(:disabled) {
+      background: #7c3aed;
+    }
+
+    .btn-o {
+      background: #fff;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-o:hover:not(:disabled) {
+      background: #f1f3f7;
+    }
+
+    .btn-sm {
+      padding: 4px 9px;
+      font-size: .66rem;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .auto-panel {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: var(--radius);
+      padding: 14px;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+
+    .auto-panel .card-title {
+      color: rgba(255, 255, 255, .75);
+    }
+
+    .auto-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .auto-btn {
+      flex: 1;
+      padding: 9px;
+      border: none;
+      border-radius: 7px;
+      font-size: .8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .2s;
+    }
+
+    .auto-btn.play {
+      background: rgba(255, 255, 255, .18);
+      color: #fff;
+    }
+
+    .auto-btn.play:hover {
+      background: rgba(255, 255, 255, .28);
+    }
+
+    .auto-btn.play.active {
+      background: #10b981;
+    }
+
+    .auto-btn.stop {
+      background: rgba(255, 255, 255, .1);
+      color: rgba(255, 255, 255, .8);
+    }
+
+    .auto-btn.stop:hover {
+      background: rgba(239, 68, 68, .7);
+      color: #fff;
+    }
+
+    .auto-settings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .auto-settings label {
+      font-size: .62rem;
+      color: rgba(255, 255, 255, .65);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .auto-settings select,
+    .auto-settings input {
+      width: 100%;
+      padding: 5px 7px;
+      border: 1px solid rgba(255, 255, 255, .25);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, .12);
+      color: #fff;
+      font-size: .72rem;
+      outline: none;
+    }
+
+    .auto-settings select option {
+      color: #333;
+      background: #fff;
+    }
+
+    .auto-progress {
+      height: 3px;
+      background: rgba(255, 255, 255, .2);
+      border-radius: 2px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    .auto-progress-bar {
+      height: 100%;
+      background: rgba(255, 255, 255, .85);
+      border-radius: 2px;
+      transition: width .3s;
+      width: 0;
+    }
+
+    .auto-status {
+      margin-top: 7px;
+      font-size: .64rem;
+      color: rgba(255, 255, 255, .6);
+      display: flex;
       justify-content: space-between;
-      padding: 11px 16px;
-      border-bottom: 1px solid var(--line);
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: .12em;
-      color: var(--mut)
     }
 
-    .rec {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--coral);
-      display: inline-block;
-      margin-right: 8px;
-      animation: blink 1.3s infinite
+    .live-badge {
+      font-size: .55rem;
+      background: rgba(16, 185, 129, .8);
+      padding: 1px 6px;
+      border-radius: 8px;
+      animation: lp 2s infinite;
     }
 
-    @keyframes blink {
+    @keyframes lp {
 
       0%,
       100% {
-        opacity: 1
+        opacity: 1;
       }
 
       50% {
-        opacity: .15
+        opacity: .4;
       }
     }
 
-    .sim-b {
-      padding: 18px 16px 16px
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
     }
 
-    .alabel {
+    @media(max-width:800px) {
+      .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 6px;
+      text-align: center;
+      cursor: default;
+    }
+
+    .stat-card.pulse {
+      animation: sp .3s ease;
+    }
+
+    @keyframes sp {
+      50% {
+        transform: scale(1.05);
+      }
+    }
+
+    .stat-value {
+      font-size: .95rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-label {
+      font-size: .58rem;
+      color: var(--muted);
+      margin-top: 1px;
+      text-transform: uppercase;
+    }
+
+    .mem-sec {
+      margin-bottom: 12px;
+    }
+
+    .mem-hdr {
       display: flex;
       justify-content: space-between;
-      font-family: var(--mono);
-      font-size: 9.5px;
-      letter-spacing: .1em;
-      color: var(--dim);
-      margin: 0 2px 6px
+      align-items: center;
+      margin-bottom: 5px;
     }
 
-    .arena {
+    .mem-title {
+      font-size: .74rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mem-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .mem-info {
+      font-size: .64rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .mem-bar {
+      display: flex;
+      height: 38px;
+      border-radius: 7px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #eef1f5;
+      gap: 1px;
+    }
+
+    .mem-blk {
       position: relative;
-      height: 58px;
-      background: #0a1d14;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      margin-bottom: 16px;
-      overflow: hidden
-    }
-
-    .arena.iram {
-      height: 40px
-    }
-
-    .tick {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: var(--line2);
-      opacity: .7
-    }
-
-    .ticklbl {
-      position: absolute;
-      top: 3px;
-      font-family: var(--mono);
-      font-size: 8.5px;
-      color: var(--dim);
-      letter-spacing: .08em;
-      transform: translateX(4px)
-    }
-
-    .reserve {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      right: 0;
-      background: repeating-linear-gradient(45deg, rgba(239, 111, 78, .16) 0 5px, transparent 5px 10px);
-      border-left: 1px dashed rgba(239, 111, 78, .5)
-    }
-
-    .blk {
-      position: absolute;
-      top: 5px;
-      bottom: 5px;
-      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .55rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+      overflow: hidden;
+      cursor: pointer;
       min-width: 2px;
-      transition: left .5s cubic-bezier(.2, .8, .2, 1), width .5s cubic-bezier(.2, .8, .2, 1), opacity .3s, transform .3s
+      transition: filter .2s, transform .2s;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .3);
     }
 
-    .blk.dram {
-      background: linear-gradient(180deg, #f0bd77, #c98f47);
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35)
+    .mem-blk:hover {
+      filter: brightness(1.12);
+      z-index: 5;
+      transform: scaleY(1.06);
     }
 
-    .blk.exec {
-      background: linear-gradient(180deg, #ff8a68, #cf5236);
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35)
+    .mem-blk.free {
+      background: #eef1f5;
+      color: var(--muted);
+      cursor: default;
     }
 
-    .blk.fb {
-      background: linear-gradient(180deg, #7fe6b6, #3fae7e);
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35)
+    .mem-blk.free:hover {
+      transform: none;
+      filter: none;
     }
 
-    .blk.cross {
-      background: linear-gradient(180deg, #f0bd77, #c98f47);
-      outline: 1px dashed var(--coral);
-      outline-offset: -1px
+    .mem-blk.selected {
+      outline: 2px solid #1e293b;
+      outline-offset: -2px;
+      z-index: 6;
+      animation: bp 1.2s ease-in-out infinite;
     }
 
-    .blk.new {
-      animation: pop .45s cubic-bezier(.2, .9, .3, 1.4)
+    @keyframes bp {
+
+      0%,
+      100% {
+        outline-color: #1e293b;
+      }
+
+      50% {
+        outline-color: rgba(30, 41, 59, .3);
+      }
     }
 
-    @keyframes pop {
+    @keyframes ba {
       0% {
-        transform: scaleY(.1);
-        filter: brightness(2.4)
+        opacity: 0;
+        transform: scaleY(.3);
+      }
+
+      60% {
+        opacity: 1;
+        transform: scaleY(1.08);
       }
 
       100% {
-        transform: none;
-        filter: none
+        opacity: 1;
+        transform: scaleY(1);
       }
     }
 
-    .blk.die {
-      opacity: 0;
-      transform: scaleY(.1)
+    @keyframes bf {
+      0% {
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .9);
+      }
+
+      100% {
+        box-shadow: inset 0 0 0 0 rgba(255, 255, 255, 0);
+      }
+    }
+
+    .mem-blk.appear {
+      animation: ba .35s ease-out;
+    }
+
+    .mem-blk.flash {
+      animation: bf .45s ease-out;
+    }
+
+    .region-markers {
+      display: flex;
+      height: 4px;
+      margin-top: 2px;
+      border-radius: 2px;
+      overflow: hidden;
+      gap: 1px;
+    }
+
+    .region-marker {
+      border-radius: 1px;
     }
 
     .legend {
       display: flex;
-      gap: 16px;
       flex-wrap: wrap;
-      font-family: var(--mono);
-      font-size: 9.5px;
-      letter-spacing: .08em;
-      color: var(--mut);
-      margin: 2px 2px 16px
+      gap: 10px;
+      margin-top: 8px;
+      padding: 7px 10px;
+      background: #f8f9fb;
+      border-radius: 7px;
     }
 
-    .legend i {
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: .62rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .legend-dot {
       width: 10px;
       height: 10px;
-      border-radius: 2px;
-      display: inline-block;
-      margin-right: 6px;
-      vertical-align: -1px
+      border-radius: 3px;
     }
 
-    .simstats {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      border-top: 1px solid var(--line)
-    }
-
-    .ss {
-      padding: 12px 14px;
-      border-left: 1px solid var(--line)
-    }
-
-    .ss:first-child {
-      border-left: none
-    }
-
-    .ss .v {
-      font-family: var(--disp);
-      font-weight: 700;
-      font-size: 24px;
-      color: var(--copper2);
-      font-variant-numeric: tabular-nums;
-      line-height: 1.1
-    }
-
-    .ss:nth-child(2) .v {
-      color: var(--mint)
-    }
-
-    .ss:nth-child(4) .v {
-      color: var(--sky)
-    }
-
-    .ss:nth-child(5) .v {
-      color: var(--coral)
-    }
-
-    .ss .l {
-      font-family: var(--mono);
-      font-size: 8.5px;
-      letter-spacing: .14em;
-      color: var(--dim);
-      text-transform: uppercase;
-      margin-top: 2px
-    }
-
-    /* ---------- spec strip ---------- */
-    .specs {
-      max-width: 1300px;
-      margin: 26px auto 0;
-      padding: 0 30px
-    }
-
-    .specbar {
+    .tabs {
       display: flex;
-      flex-wrap: wrap;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: rgba(15, 42, 30, .6)
+      gap: 3px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .sp {
-      flex: 1 1 170px;
-      padding: 16px 22px;
-      border-left: 1px solid var(--line);
-      transition: background .3s
+    .tab {
+      padding: 6px 14px;
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: .2s;
     }
 
-    .sp:first-child {
-      border-left: none;
-      flex: 1.4 1 220px
+    .tab:hover {
+      color: var(--text);
     }
 
-    .sp:hover {
-      background: rgba(95, 214, 160, .05)
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
     }
 
-    .sp .v {
-      font-family: var(--disp);
-      font-weight: 800;
-      font-size: 30px;
-      color: var(--ink);
-      line-height: 1
+    .tab-content {
+      display: none;
     }
 
-    .sp:first-child .v {
-      font-size: 38px;
-      color: var(--copper2)
+    .tab-content.active {
+      display: block;
+      animation: tf .25s ease;
     }
 
-    .sp .l {
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: .16em;
-      color: var(--dim);
-      text-transform: uppercase;
-      margin-top: 5px
-    }
+    @keyframes tf {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
 
-    /* ---------- sections ---------- */
-    section {
-      max-width: 1300px;
-      margin: 0 auto;
-      padding: 72px 30px 20px
-    }
-
-    .shead {
-      display: flex;
-      gap: 22px;
-      align-items: flex-start;
-      margin-bottom: 34px
-    }
-
-    .idx {
-      font-family: var(--disp);
-      font-weight: 800;
-      font-size: 66px;
-      line-height: .85;
-      color: transparent;
-      -webkit-text-stroke: 1.3px var(--line2);
-      flex-shrink: 0
-    }
-
-    .kicker {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: .24em;
-      color: var(--copper);
-      text-transform: uppercase;
-      margin-bottom: 8px
-    }
-
-    h2 {
-      font-family: var(--disp);
-      font-weight: 800;
-      text-transform: uppercase;
-      font-size: clamp(32px, 4.4vw, 50px);
-      line-height: 1;
-      letter-spacing: .01em
-    }
-
-    .sub {
-      color: var(--mut);
-      max-width: 70ch;
-      margin-top: 12px
-    }
-
-    .sub code {
-      font-family: var(--mono);
-      font-size: .86em;
-      color: var(--copper2)
-    }
-
-    .rv {
-      opacity: 0;
-      transform: translateY(28px);
-      transition: opacity .7s ease, transform .7s cubic-bezier(.2, .7, .2, 1)
-    }
-
-    .rv.in {
-      opacity: 1;
-      transform: none
-    }
-
-    /* ---------- flow diagram ---------- */
-    .flow {
-      display: flex;
-      align-items: stretch;
-      gap: 0;
-      flex-wrap: wrap;
-      margin: 8px 0 20px
-    }
-
-    .node {
-      border: 1px solid var(--line2);
-      background: var(--panel);
-      border-radius: 5px;
-      padding: 14px 18px;
-      min-width: 150px;
-      transition: .3s;
-      position: relative
-    }
-
-    .node:hover {
-      border-color: var(--copper);
-      transform: translateY(-3px);
-      box-shadow: 0 10px 26px rgba(0, 0, 0, .4)
-    }
-
-    .node .t {
-      font-family: var(--mono);
-      font-size: 11.5px;
-      color: var(--copper2);
-      letter-spacing: .04em
-    }
-
-    .node .d {
-      font-size: 12px;
-      color: var(--mut);
-      margin-top: 5px
-    }
-
-    .node.iram {
-      border-color: rgba(239, 111, 78, .5)
-    }
-
-    .node.iram .t {
-      color: var(--coral)
-    }
-
-    .node.dram .t {
-      color: var(--mint)
-    }
-
-    .wire {
-      flex: 1;
-      min-width: 26px;
-      align-self: center;
-      height: 2px;
-      background: repeating-linear-gradient(90deg, var(--copper) 0 7px, transparent 7px 14px);
-      opacity: .55;
-      animation: flow 1.1s linear infinite
-    }
-
-    @keyframes flow {
       to {
-        background-position: 14px 0
+        opacity: 1;
+        transform: translateY(0);
       }
     }
 
-    .flabel {
-      width: 100%;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--dim);
-      letter-spacing: .1em;
-      margin: 14px 0 6px;
-      text-transform: uppercase
-    }
-
-    /* ---------- layout diagram ---------- */
-    .memrow {
-      margin-bottom: 26px
-    }
-
-    .membar {
-      display: flex;
-      height: 64px;
-      border: 1px solid var(--line2);
-      border-radius: 5px;
-      overflow: hidden;
-      font-family: var(--mono)
-    }
-
-    .seg {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      letter-spacing: .06em;
-      color: #1a1206;
-      font-weight: 500;
-      transition: filter .3s;
-      cursor: default;
-      position: relative;
-      overflow: hidden;
-      white-space: nowrap
-    }
-
-    .seg:hover {
-      filter: brightness(1.25)
-    }
-
-    .seg.hatch {
-      background: repeating-linear-gradient(45deg, #20493a 0 6px, #16352a 6px 12px) !important;
-      color: var(--mut)
-    }
-
-    .seg.r0 {
-      background: var(--copper2);
-      flex: 0 0 15%
-    }
-
-    .seg.r1 {
-      background: var(--copper);
-      flex: 0 0 45%
-    }
-
-    .seg.r2 {
-      background: var(--copper3);
-      flex: 1
-    }
-
-    .seg.fw {
-      flex: 0 0 17%
-    }
-
-    .seg.bm {
-      flex: 0 0 5%;
-      background: #2b5a48 !important;
-      color: var(--mint);
-      font-size: 8.5px
-    }
-
-    .seg.code {
-      flex: 0 0 34%
-    }
-
-    .seg.ex {
-      flex: 0 0 16%;
-      background: linear-gradient(180deg, #ff8a68, #cf5236)
-    }
-
-    .seg.free {
-      flex: 1;
-      background: #12332a !important;
-      color: var(--mint)
-    }
-
-    .seg.fbr {
-      flex: 0 0 20%;
-      background: linear-gradient(180deg, #7fe6b6, #3fae7e)
-    }
-
-    .seg.rsv {
-      flex: 0 0 9%;
-      background: repeating-linear-gradient(45deg, rgba(239, 111, 78, .3) 0 5px, #1c3a2e 5px 10px) !important;
-      color: var(--coral);
-      font-size: 8.5px
-    }
-
-    .addr {
-      display: flex;
-      justify-content: space-between;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--dim);
-      margin-top: 6px;
-      letter-spacing: .06em
-    }
-
-    .mtitle {
-      font-family: var(--mono);
-      font-size: 11px;
-      letter-spacing: .18em;
-      color: var(--mut);
-      margin-bottom: 8px;
-      text-transform: uppercase
-    }
-
-    .mtitle b {
-      color: var(--copper2);
-      font-weight: 500
-    }
-
-    /* ---------- policy tester ---------- */
-    .pt {
-      display: grid;
-      grid-template-columns: .9fr 1.1fr;
-      gap: 26px
-    }
-
-    .ptbox {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel);
-      padding: 22px
-    }
-
-    .pt h4 {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .2em;
-      color: var(--dim);
-      text-transform: uppercase;
-      margin-bottom: 14px
-    }
-
-    .sizerow {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 20px
-    }
-
-    input[type=range] {
-      flex: 1;
-      accent-color: var(--copper);
-      cursor: pointer
-    }
-
-    .sizev {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--copper2);
-      min-width: 74px;
-      text-align: right
-    }
-
-    .caps {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 20px
-    }
-
-    .capbtn {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: .08em;
-      padding: 8px 13px;
-      border-radius: 3px;
-      cursor: pointer;
-      border: 1px solid var(--line);
-      background: transparent;
-      color: var(--mut);
-      transition: .2s
-    }
-
-    .capbtn:hover {
-      border-color: var(--copper);
-      color: var(--copper2)
-    }
-
-    .capbtn.on {
-      background: var(--copper);
-      border-color: var(--copper);
-      color: #1a1206;
-      font-weight: 500
-    }
-
-    .presets {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 20px
-    }
-
-    .pre {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .06em;
-      padding: 6px 11px;
-      border-radius: 3px;
-      cursor: pointer;
-      border: 1px dashed var(--line2);
-      background: transparent;
-      color: var(--mut);
-      transition: .2s
-    }
-
-    .pre:hover {
-      border-color: var(--mint);
-      color: var(--mint)
-    }
-
-    .lane {
-      border: 1px solid var(--line);
-      border-radius: 5px;
-      padding: 13px 16px;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      transition: .35s;
-      opacity: .45
-    }
-
-    .lane .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      flex-shrink: 0
-    }
-
-    .lane .n {
-      font-family: var(--mono);
-      font-size: 12px;
-      letter-spacing: .06em
-    }
-
-    .lane .s {
-      font-size: 11.5px;
-      color: var(--dim);
-      margin-left: auto;
-      font-family: var(--mono)
-    }
-
-    .lane.hit {
-      opacity: 1;
-      transform: translateX(8px)
-    }
-
-    .lane.armed {
-      opacity: .72;
-      border-style: dashed;
-      transform: none
-    }
-
-    .lane.armed .dot {
-      animation: blink 1.5s infinite
-    }
-
-    .lane.l0.hit {
-      border-color: var(--coral);
-      box-shadow: 0 0 22px rgba(239, 111, 78, .12)
-    }
-
-    .lane.l0 .dot {
-      background: var(--coral)
-    }
-
-    .lane.l1.hit {
-      border-color: var(--mint);
-      box-shadow: 0 0 22px rgba(95, 214, 160, .12)
-    }
-
-    .lane.l1 .dot {
-      background: var(--mint)
-    }
-
-    .lane.l2.hit {
-      border-color: var(--sky);
-      box-shadow: 0 0 22px rgba(121, 184, 216, .12)
-    }
-
-    .lane.l2 .dot {
-      background: var(--sky)
-    }
-
-    .lane.l3.hit {
-      border-color: var(--dim);
-      box-shadow: 0 0 22px rgba(93, 130, 113, .15)
-    }
-
-    .lane.l3 .dot {
-      background: var(--dim)
-    }
-
-    .verdict {
-      font-family: var(--disp);
-      font-weight: 800;
-      font-size: 44px;
-      text-transform: uppercase;
-      line-height: 1;
-      margin: 18px 0 8px;
-      transition: .3s
-    }
-
-    .verdict.v-dram {
-      color: var(--mint)
-    }
-
-    .verdict.v-iram {
-      color: var(--coral)
-    }
-
-    .verdict.v-null {
-      color: var(--dim)
-    }
-
-    .why {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--mut);
-      line-height: 1.7
-    }
-
-    .badge {
-      display: inline-block;
-      font-family: var(--mono);
-      font-size: 9.5px;
-      letter-spacing: .12em;
-      padding: 5px 10px;
-      border-radius: 3px;
-      margin-top: 14px;
-      border: 1px solid var(--copper);
-      color: var(--copper2)
-    }
-
-    /* ---------- descriptor lab ---------- */
-    .desc {
-      display: grid;
-      grid-template-columns: 1.15fr .85fr;
-      gap: 30px;
-      align-items: start
-    }
-
-    .wordrow {
-      margin-bottom: 22px
-    }
-
-    .wname {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: .16em;
-      color: var(--mut);
-      margin-bottom: 8px;
-      text-transform: uppercase
-    }
-
-    .word {
-      display: flex;
-      gap: 2px
-    }
-
-    .bit {
-      flex: 1;
-      aspect-ratio: 1.4;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--mono);
-      font-size: 9px;
-      border: 1px solid var(--line);
-      border-radius: 3px;
-      color: var(--dim);
-      background: #0a1d14;
-      transition: .2s;
-      cursor: default
-    }
-
-    .bit:hover {
-      transform: translateY(-3px);
-      border-color: var(--copper2)
-    }
-
-    .bit.on {
-      color: #10241a;
-      font-weight: 500
-    }
-
-    .w-off .bit.on {
-      background: var(--mint);
-      border-color: var(--mint)
-    }
-
-    .w-len .bit.on {
-      background: var(--sky);
-      border-color: var(--sky)
-    }
-
-    .w-off .bit.flag {
-      border-color: var(--copper)
-    }
-
-    .w-len .bit.flag {
-      border-color: var(--coral)
-    }
-
-    .w-off .bit.flag.on {
-      background: var(--copper);
-      border-color: var(--copper)
-    }
-
-    .w-len .bit.flag.on {
-      background: var(--coral);
-      border-color: var(--coral)
-    }
-
-    .bitidx {
-      display: flex;
-      gap: 2px;
-      margin-top: 5px
-    }
-
-    .bitidx span {
-      flex: 1;
-      text-align: center;
-      font-family: var(--mono);
-      font-size: 7px;
-      color: var(--dim)
-    }
-
-    .dlab {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel);
-      padding: 22px
-    }
-
-    .dlab label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--mut);
-      letter-spacing: .08em;
-      margin-bottom: 8px;
-      gap: 12px
-    }
-
-    .dlab input[type=range] {
-      flex: 1;
-      accent-color: var(--copper)
-    }
-
-    .dlab .val {
-      color: var(--copper2);
-      min-width: 56px;
-      text-align: right
-    }
-
-    .tgl {
-      display: flex;
-      gap: 10px;
-      margin: 16px 0
-    }
-
-    .readout {
-      border-top: 1px solid var(--line);
-      margin-top: 18px;
-      padding-top: 16px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 20px
-    }
-
-    .ro .l {
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: .16em;
-      color: var(--dim);
-      text-transform: uppercase
-    }
-
-    .ro .v {
-      font-family: var(--mono);
-      font-size: 14px;
-      color: var(--copper2);
-      margin-top: 2px;
-      word-break: break-all
-    }
-
-    /* ---------- calculator ---------- */
-    .calc {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel);
-      padding: 24px
-    }
-
-    .crow {
-      display: grid;
-      grid-template-columns: 1fr 1fr 220px;
-      gap: 16px;
-      margin-bottom: 20px
-    }
-
-    .crow label {
-      font-family: var(--mono);
-      font-size: 9.5px;
-      letter-spacing: .16em;
-      color: var(--dim);
-      text-transform: uppercase;
-      display: block;
-      margin-bottom: 7px
-    }
-
-    .crow input {
-      width: 100%;
-      background: #0a1d14;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      color: var(--copper2);
-      font-family: var(--mono);
-      font-size: 13px;
-      padding: 10px 13px;
-      transition: border-color .25s
-    }
-
-    .crow input:focus {
-      outline: none;
-      border-color: var(--copper)
-    }
-
-    .cbar {
-      display: flex;
-      height: 46px;
-      border: 1px solid var(--line2);
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 6px
-    }
-
-    .cseg {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: #1a1206;
-      font-weight: 500;
-      transition: width .5s cubic-bezier(.2, .8, .2, 1), filter .3s;
-      white-space: nowrap;
-      overflow: hidden
-    }
-
-    .cseg:hover {
-      filter: brightness(1.2)
-    }
-
-    .ctable {
-      width: 100%;
-      margin-top: 18px
-    }
-
-    .cerr {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--coral);
-      padding: 14px;
-      border: 1px dashed rgba(239, 111, 78, .5);
-      border-radius: 4px
-    }
-
-    /* ---------- scan race ---------- */
-    .race {
-      display: grid;
-      gap: 18px;
-      margin-top: 8px
-    }
-
-    .scanrow {
-      display: flex;
-      gap: 4px;
-      align-items: center
-    }
-
-    .scanrow .tag {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .12em;
-      color: var(--mut);
-      width: 150px;
-      flex-shrink: 0;
-      text-transform: uppercase
-    }
-
-    .scell {
-      flex: 1;
-      height: 34px;
-      border: 1px solid var(--line);
-      border-radius: 3px;
-      background: #0a1d14;
-      transition: .15s;
-      position: relative
-    }
-
-    .scell.cur {
-      background: var(--copper);
-      border-color: var(--copper);
-      box-shadow: 0 0 14px rgba(226, 164, 92, .5)
-    }
-
-    .scell.hit {
-      background: var(--mint);
-      border-color: var(--mint);
-      box-shadow: 0 0 16px rgba(95, 214, 160, .6)
-    }
-
-    .scell.dim {
-      opacity: .35
-    }
-
-    .ops {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      color: var(--dim);
-      margin: 0px 0 4px 150px;
-      letter-spacing: .06em
-    }
-
-    .ops b {
-      color: var(--copper2);
-      font-weight: 500
-    }
-
-    /* ---------- tables ---------- */
-    .tblwrap {
-      overflow-x: auto;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: rgba(15, 42, 30, .5)
-    }
-
-    table {
+    .tbl {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13.5px;
-      min-width: 640px
+      font-size: .66rem;
+      font-family: 'JetBrains Mono', monospace;
     }
 
-    th {
-      font-family: var(--mono);
-      font-size: 9.5px;
-      letter-spacing: .16em;
-      color: var(--mut);
-      text-transform: uppercase;
+    .tbl th {
       text-align: left;
-      padding: 13px 16px;
-      border-bottom: 1px solid var(--line2);
-      background: rgba(10, 29, 20, .7)
-    }
-
-    td {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--line);
-      vertical-align: top;
-      color: var(--mut)
-    }
-
-    tr:last-child td {
-      border-bottom: none
-    }
-
-    tbody tr {
-      transition: background .2s
-    }
-
-    tbody tr:hover {
-      background: rgba(95, 214, 160, .045)
-    }
-
-    td:first-child {
-      color: var(--ink)
-    }
-
-    td code,
-    td .opt {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--copper2)
-    }
-
-    td .no {
-      color: var(--dim)
-    }
-
-    td .yes {
-      color: var(--mint)
-    }
-
-    /* ---------- code ---------- */
-    .code {
-      position: relative;
-      background: #0a1b12;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      margin: 16px 0;
-      transition: border-color .3s
-    }
-
-    .code:hover {
-      border-color: var(--line2)
-    }
-
-    .code .chead {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 9px 16px;
-      border-bottom: 1px solid var(--line);
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .14em;
-      color: var(--dim);
-      text-transform: uppercase
-    }
-
-    .code pre {
-      padding: 18px 20px;
-      overflow-x: auto;
-      font-family: var(--mono);
-      font-size: 12.5px;
-      line-height: 1.65;
-      color: #cfe6d6
-    }
-
-    .copy {
-      font-family: var(--mono);
-      font-size: 9.5px;
-      letter-spacing: .12em;
-      background: transparent;
-      border: 1px solid var(--line2);
-      color: var(--mut);
-      padding: 4px 10px;
-      border-radius: 3px;
-      cursor: pointer;
-      transition: .2s
-    }
-
-    .copy:hover {
-      border-color: var(--copper);
-      color: var(--copper2)
-    }
-
-    .tk-c {
-      color: #5d8271;
-      font-style: italic
-    }
-
-    .tk-s {
-      color: #8fdcb4
-    }
-
-    .tk-k {
-      color: #e8b877
-    }
-
-    .tk-n {
-      color: #8fc3dd
-    }
-
-    .tk-p {
-      color: #ef8f72
-    }
-
-    /* ---------- steps ---------- */
-    .steps {
-      display: grid;
-      gap: 0;
-      counter-reset: st
-    }
-
-    .step {
-      display: grid;
-      grid-template-columns: 110px 1fr;
-      gap: 26px;
-      padding: 26px 0;
-      border-bottom: 1px dashed var(--line)
-    }
-
-    .step:last-child {
-      border-bottom: none
-    }
-
-    .stepnum {
-      font-family: var(--disp);
-      font-weight: 800;
-      font-size: 58px;
-      line-height: .85;
-      color: transparent;
-      -webkit-text-stroke: 1.3px var(--copper3)
-    }
-
-    .step h3 {
-      font-family: var(--disp);
-      font-weight: 700;
-      font-size: 24px;
-      text-transform: uppercase;
-      letter-spacing: .02em;
-      margin-bottom: 8px
-    }
-
-    .step p {
-      color: var(--mut);
-      font-size: 14.5px;
-      max-width: 66ch
-    }
-
-    /* ---------- uart ---------- */
-    .uart {
-      background: #050f0a;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 20px 22px;
-      font-family: var(--mono);
-      font-size: 12px;
-      line-height: 1.85;
-      color: #9fe8c0;
-      overflow-x: auto;
-      position: relative
-    }
-
-    .uart::after {
-      content: '▊';
-      animation: blink 1s infinite;
-      color: var(--mint)
-    }
-
-    .uart .ln {
-      opacity: 0;
-      transform: translateX(-6px)
-    }
-
-    .uart.in .ln {
-      animation: lnin .4s forwards
-    }
-
-    .uart.in .ln:nth-child(1) {
-      animation-delay: .1s
-    }
-
-    .uart.in .ln:nth-child(2) {
-      animation-delay: .3s
-    }
-
-    .uart.in .ln:nth-child(3) {
-      animation-delay: .5s
-    }
-
-    .uart.in .ln:nth-child(4) {
-      animation-delay: .7s
-    }
-
-    .uart.in .ln:nth-child(5) {
-      animation-delay: .9s
-    }
-
-    .uart.in .ln:nth-child(6) {
-      animation-delay: 1.1s
-    }
-
-    .uart.in .ln:nth-child(7) {
-      animation-delay: 1.3s
-    }
-
-    .uart.in .ln:nth-child(8) {
-      animation-delay: 1.5s
-    }
-
-    @keyframes lnin {
-      to {
-        opacity: 1;
-        transform: none
-      }
-    }
-
-    .uart .tg {
-      color: var(--copper2)
-    }
-
-    .uart .hl {
-      color: #eafff3
-    }
-
-    .uart .ir {
-      color: #ff9d82
-    }
-
-    /* ---------- faq ---------- */
-    details {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel);
-      margin-bottom: 10px;
-      transition: border-color .3s
-    }
-
-    details[open] {
-      border-color: var(--line2)
-    }
-
-    summary {
-      cursor: pointer;
-      padding: 15px 20px;
+      padding: 5px 6px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
       font-weight: 600;
-      font-size: 15px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      list-style: none
-    }
-
-    summary::-webkit-marker {
-      display: none
-    }
-
-    summary::after {
-      content: '+';
-      font-family: var(--mono);
-      color: var(--copper);
-      font-size: 18px;
-      transition: transform .3s
-    }
-
-    details[open] summary::after {
-      transform: rotate(45deg)
-    }
-
-    summary:hover {
-      color: var(--copper2)
-    }
-
-    details .ans {
-      padding: 0 20px 18px;
-      color: var(--mut);
-      font-size: 14px;
-      max-width: 80ch
-    }
-
-    details .ans code {
-      font-family: var(--mono);
-      font-size: .86em;
-      color: var(--copper2)
-    }
-
-    /* ---------- footer ---------- */
-    footer {
-      border-top: 1px solid var(--line);
-      margin-top: 80px;
-      background: rgba(10, 29, 20, .6)
-    }
-
-    .fgrid {
-      max-width: 1300px;
-      margin: 0 auto;
-      padding: 56px 30px;
-      display: grid;
-      grid-template-columns: 1.3fr 1fr 1fr;
-      gap: 44px
-    }
-
-    .fh {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .22em;
-      color: var(--copper);
       text-transform: uppercase;
-      margin-bottom: 16px
+      font-size: .58rem;
     }
 
-    .fabout {
-      color: var(--mut);
-      font-size: 14px;
-      max-width: 44ch
+    .tbl td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #f1f3f7;
     }
 
-    .topics {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px
+    .tbl tr:hover td {
+      background: #f8f9fb;
     }
 
-    .topic {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .06em;
-      color: var(--mint);
-      border: 1px solid var(--line);
-      padding: 5px 10px;
-      border-radius: 20px;
-      transition: .25s;
-      cursor: default
+    .tbl tr.new-row {
+      animation: ra .35s ease;
     }
 
-    .topic:hover {
-      border-color: var(--mint);
-      background: rgba(95, 214, 160, .08);
-      transform: translateY(-2px)
-    }
-
-    .tree {
-      font-family: var(--mono);
-      font-size: 11.5px;
-      line-height: 1.9;
-      color: var(--mut)
-    }
-
-    .tree b {
-      color: var(--copper2);
-      font-weight: 500
-    }
-
-    .fbot {
-      border-top: 1px solid var(--line);
-      padding: 18px 30px;
-      text-align: center;
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .16em;
-      color: var(--dim);
-      text-transform: uppercase
-    }
-
-    @media(max-width:1020px) {
-
-      .hero,
-      .pt,
-      .desc {
-        grid-template-columns: 1fr
+    @keyframes ra {
+      from {
+        background: #d1fae5;
       }
 
-      .fgrid {
-        grid-template-columns: 1fr
-      }
-
-      nav a:not(:nth-child(-n+4)) {
-        display: none
-      }
-
-      .crow {
-        grid-template-columns: 1fr
-      }
-
-      .step {
-        grid-template-columns: 64px 1fr
-      }
-
-      .stepnum {
-        font-size: 40px
-      }
-
-      .lane .s {
-        display: none
-      }
-
-      .simstats {
-        grid-template-columns: repeat(3, 1fr)
+      to {
+        background: transparent;
       }
     }
 
-    @media(prefers-reduced-motion:reduce) {
+    .log {
+      max-height: 190px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .62rem;
+      line-height: 1.7;
+      background: #f8f9fb;
+      border-radius: 7px;
+      padding: 7px 9px;
+    }
 
-      *,
-      *::before,
-      *::after {
-        animation: none !important;
-        transition: none !important
-      }
+    .log-entry {
+      padding: 1px 0;
+      border-bottom: 1px solid #f1f3f7;
+    }
 
-      .rv,
-      .uart .ln {
-        opacity: 1;
-        transform: none
-      }
+    .log-entry.success {
+      color: #059669;
+    }
+
+    .log-entry.error {
+      color: #dc2626;
+    }
+
+    .log-entry.info {
+      color: var(--muted);
+    }
+
+    .log-entry.auto {
+      color: #7c3aed;
+    }
+
+    .tooltip {
+      position: fixed;
+      background: rgba(15, 23, 42, .92);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 7px;
+      font-size: .66rem;
+      font-family: 'JetBrains Mono', monospace;
+      pointer-events: none;
+      z-index: 1000;
+      max-width: 260px;
+      display: none;
+      white-space: pre-line;
+      line-height: 1.5;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .2);
+    }
+
+    .event-flash {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0;
+      transition: opacity .12s;
+    }
+
+    .event-flash.malloc {
+      background: radial-gradient(ellipse at center, rgba(16, 185, 129, .07) 0%, transparent 70%);
+    }
+
+    .event-flash.free {
+      background: radial-gradient(ellipse at center, rgba(239, 68, 68, .07) 0%, transparent 70%);
+    }
+
+    .event-flash.active {
+      opacity: 1;
+    }
+
+    .reinit-badge {
+      font-size: .55rem;
+      padding: 2px 8px;
+      border-radius: 8px;
+      background: #eef2ff;
+      color: var(--accent);
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+
+    .reinit-badge.visible {
+      opacity: 1;
+    }
+
+    .alloc-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-bottom: 10px;
+    }
+
+    .alloc-form .fw {
+      grid-column: 1/-1;
     }
   </style>
 </head>
 
 <body>
-  <div class="bg">
-    <div class="grid"></div>
-    <svg preserveAspectRatio="none" viewBox="0 0 1440 900">
-      <path class="trace" d="M-20 130 H340 V290 H760 V210 H1120" stroke="rgba(226,164,92,.14)" />
-      <path class="trace" d="M1460 420 H1080 V560 H620 V640 H180 V780" stroke="rgba(95,214,160,.11)"
-        style="animation-duration:34s" />
-      <path class="trace" d="M-20 700 H260 V540 H520" stroke="rgba(121,184,216,.10)" style="animation-duration:40s" />
-      <circle class="pad" cx="340" cy="290" r="3.5" fill="rgba(226,164,92,.5)" />
-      <circle class="pad" cx="1080" cy="560" r="3.5" fill="rgba(95,214,160,.45)" style="animation-delay:1.4s" />
-      <circle class="pad" cx="260" cy="540" r="3.5" fill="rgba(121,184,216,.4)" style="animation-delay:2.6s" />
-    </svg>
+  <div class="event-flash" id="eventFlash"></div>
+  <div class="tooltip" id="tooltip"></div>
+  <div class="container">
+    <h1>⚡ MxR-Malloc Simulator</h1>
+    <p class="subtitle">ESP8266 allocator model — size-class regions, descriptors, IRAM fallback</p>
+    <div class="layout">
+      <div>
+        <div class="auto-panel">
+          <div class="card-title"><span>🤖 Auto Mode</span>
+            <span class="live-badge" id="liveBadge" style="display:none">● LIVE</span>
+          </div>
+          <div class="auto-controls">
+            <button class="auto-btn play" id="btnPlay" onclick="toggleAuto()">▶ Start</button>
+            <button class="auto-btn stop" onclick="stopAuto()">⏹ Stop</button>
+          </div>
+          <div class="auto-settings">
+            <div><label>Scenario</label>
+              <select id="autoScenario">
+                <option value="random">🎲 Random</option>
+                <option value="wifi">📶 WiFi Station</option>
+                <option value="stress">💥 Stress</option>
+                <option value="fragment">🧩 Fragmentation</option>
+                <option value="exec">⚡ EXEC</option>
+                <option value="mixed">🔄 Mixed</option>
+              </select>
+            </div>
+            <div><label>Speed</label>
+              <select id="autoSpeed" onchange="onSpeedChange()">
+                <option value="2000">🐢 2s</option>
+                <option value="1000">🚶 1s</option>
+                <option value="500">🏃 0.5s</option>
+                <option value="200">⚡ 0.2s</option>
+                <option value="50" selected>🚀 50ms</option>
+              </select>
+            </div>
+            <div><label>Max Blocks</label>
+              <input type="number" id="autoMaxBlocks" value="120" min="10" max="400">
+            </div>
+            <div><label>% Free Ops</label>
+              <input type="number" id="autoFreePercent" value="30" min="0" max="90" step="5">
+            </div>
+          </div>
+          <div class="auto-progress">
+            <div class="auto-progress-bar" id="autoProgress"></div>
+          </div>
+          <div class="auto-status">
+            <span id="autoStepCount">Step: 0</span><span id="autoAllocCount">M:0 F:0 Err:0</span>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-title"><span>⚙️ Arena</span>
+            <span class="reinit-badge" id="reinitBadge">Applied ✓</span>
+          </div>
+          <div class="sg"><label>Region Config</label>
+            <input type="text" id="regionConfig" value="4-12%,128-14%,256-10%,512-22%,1280-0%"
+              oninput="scheduleReinit()">
+          </div>
+          <div class="sg"><label>DRAM Size (bytes)</label>
+            <input type="number" id="dramSize" value="45000" min="4096" max="131072" step="4096"
+              oninput="scheduleReinit()">
+          </div>
+          <div class="sg"><label>Max DRAM Desc</label>
+            <input type="number" id="maxDesc" value="256" min="1" max="4096" oninput="scheduleReinit()">
+          </div>
+          <label class="cbx"><input type="checkbox" id="useIram" checked onchange="scheduleReinit()">
+            <span>Enable IRAM heap</span></label>
+          <div class="sg"><label>IRAM Size</label>
+            <input type="number" id="iramSize" value="23000" min="512" max="65536" step="256"
+              oninput="scheduleReinit()">
+          </div>
+          <div class="sg"><label>IRAM Reserve</label>
+            <input type="number" id="iramReserve" value="2048" min="0" max="32768" step="256"
+              oninput="scheduleReinit()">
+          </div>
+          <div class="sg"><label>IRAM Fallback Max (0=∞)</label>
+            <input type="number" id="iramFallbackMax" value="0" min="0" max="65536" step="256"
+              oninput="scheduleReinit()">
+          </div>
+          <div class="sg"><label>Max IRAM Desc</label>
+            <input type="number" id="maxIramDesc" value="128" min="1" max="4096" oninput="scheduleReinit()">
+          </div>
+          <label class="cbx"><input type="checkbox" id="crossRegion" checked onchange="scheduleReinit()">
+            <span>Cross-region fallback</span></label>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📝 Log</div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+      <div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="stTotal">0</div>
+            <div class="stat-label">Total</div>
+          </div>
+          <div class="stat-card" id="stFreeCard">
+            <div class="stat-value" id="stFree">0</div>
+            <div class="stat-label">Free</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stMinFree">0</div>
+            <div class="stat-label">Min Free</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stLargest">0</div>
+            <div class="stat-label">Largest</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stActive">0</div>
+            <div class="stat-label">Active</div>
+          </div>
+          <div class="stat-card" id="stFailedCard" title="">
+            <div class="stat-value" id="stFailed">0</div>
+            <div class="stat-label">Failed</div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-title">🗺️ Memory Map</div>
+          <div class="mem-sec">
+            <div class="mem-hdr">
+              <span class="mem-title"><span class="mem-dot" style="background:#4f6ef7"></span>DRAM</span>
+              <span class="mem-info" id="dramInfo"></span>
+            </div>
+            <div class="mem-bar" id="dramBar"></div>
+            <div class="region-markers" id="dramMarkers"></div>
+          </div>
+          <div class="mem-sec" id="iramSec">
+            <div class="mem-hdr">
+              <span class="mem-title"><span class="mem-dot" style="background:#8b5cf6"></span>IRAM</span>
+              <span class="mem-info" id="iramInfo"></span>
+            </div>
+            <div class="mem-bar" id="iramBar"></div>
+          </div>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div class="card">
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab('alloc',this)">💾 Allocation</div>
+            <div class="tab" onclick="switchTab('desc',this)">📋 Descriptors</div>
+            <div class="tab" onclick="switchTab('regions',this)">📊 Regions</div>
+          </div>
+          <div class="tab-content active" id="tab-alloc">
+            <div class="alloc-form">
+              <div class="sg"><label>Size (bytes)</label>
+                <input type="number" id="allocSize" value="64" min="1" max="131072">
+              </div>
+              <div class="sg"><label>Capabilities</label>
+                <select id="allocCaps">
+                  <option value="2">MALLOC_CAP_32BIT</option>
+                  <option value="1">MALLOC_CAP_EXEC</option>
+                  <option value="6">32BIT | 8BIT</option>
+                  <option value="14">32BIT | 8BIT | DMA</option>
+                  <option value="0">ANY</option>
+                </select>
+              </div>
+              <div class="fw btn-group">
+                <button class="btn btn-g" onclick="doMalloc()">➕ malloc</button>
+                <button class="btn btn-r" id="btnFree" onclick="doFree()" disabled>🗑️ free</button>
+                <button class="btn btn-b" onclick="doRandomAlloc()">🎲 Random</button>
+                <button class="btn btn-o" onclick="doFreeAll()">🧹 Free All</button>
+              </div>
+              <div class="fw btn-group">
+                <button class="btn btn-o btn-sm" onclick="doStress(4,56,10)">Small</button>
+                <button class="btn btn-o btn-sm" onclick="doStress(56,128,8)">Medium</button>
+                <button class="btn btn-o btn-sm" onclick="doStress(128,4096,5)">Large</button>
+                <button class="btn btn-o btn-sm" onclick="doStressExec()">EXEC</button>
+                <button class="btn btn-p btn-sm" onclick="doRealloc()">🔁 realloc</button>
+              </div>
+            </div>
+          </div>
+          <div class="tab-content" id="tab-desc">
+            <div style="max-height:300px;overflow-y:auto">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Arena</th>
+                    <th>Offset</th>
+                    <th>Len</th>
+                    <th>EXEC</th>
+                    <th>Region</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="descTable"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="tab-content" id="tab-regions">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Min</th>
+                  <th>Max</th>
+                  <th>Total</th>
+                  <th>Free</th>
+                  <th>MinFree</th>
+                  <th>Largest</th>
+                  <th>Allocs</th>
+                </tr>
+              </thead>
+              <tbody id="regionTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="progress" id="prog"></div>
-  <header class="top">
-    <div class="mark">MxR<small>DESCRIPTOR&nbsp;HEAP</small></div>
-    <nav id="nav">
-      <a href="#how">Architecture</a>
-      <a href="#policy">Policy</a>
-      <a href="#descriptor">Descriptor</a>
-      <a href="#regions">Regions</a>
-      <a href="#search">Search</a>
-      <a href="#install">Install</a>
-      <a href="#api">API</a>
-      <a href="#faq">FAQ</a>
-    </nav>
-    <span class="tchip">ESP8266 · SDK v3.4</span>
-  </header>
-  <!-- ======================= HERO ======================= -->
-  <div class="hero">
-    <div>
-      <div class="eyebrow">ESP8266 RTOS SDK v3.4 · <b>v2 heap component</b> · linker --wrap drop-in</div>
-      <h1>MxR<span class="cu">-</span>MALLOC<span class="hollow">Descriptor Heap Engine</span></h1>
-      <p class="lead">A compact allocator that keeps all metadata in an <b>out-of-band descriptor table</b> —
-        zero in-band headers, exact 4-byte alignment, size-class DRAM regions, an
-        <b>IRAM-first</b> routing for 32BIT allocations, and an opt-in <code>cross-region</code> last resort.
-      </p>
-      <div class="chips">
-        <span class="chip">XTENSA LX106</span><span class="chip">8-BYTE DESCRIPTORS</span>
-        <span class="chip">256 DESCRIPTORS · 2 KB</span><span class="chip">DRAM + IRAM</span>
-        <span class="chip">IRAM-FIRST 32BIT</span><span class="chip">CROSS-REGION OPT-IN</span>
-      </div>
-      <div class="btnrow">
-        <a class="btn solid" href="#how">See how it works ↓</a>
-        <a class="btn ghost" href="#install">Install guide</a>
-      </div>
-    </div>
-    <div class="sim" id="simPanel">
-      <div class="sim-h">
-        <span><span class="rec"></span>LIVE ARENA SIMULATION</span>
-        <span>0x3FFE8000 → 0x40000000</span>
-      </div>
-      <div class="sim-b">
-        <div class="alabel"><span>DRAM · 3 SIZE-CLASS REGIONS</span><span>gap scan</span></div>
-        <div class="arena" id="dramBar"></div>
-        <div class="alabel"><span>IRAM · EXEC + 32BIT</span><span>exec→start · 32bit→end</span></div>
-        <div class="arena iram" id="iramBar">
-          <div class="reserve" style="width:16.7%"></div>
-        </div>
-        <div class="legend">
-          <span><i style="background:linear-gradient(180deg,#f0bd77,#c98f47)"></i>DRAM BLOCK</span>
-          <span><i style="background:linear-gradient(180deg,#ff8a68,#cf5236)"></i>IRAM · EXEC</span>
-          <span><i style="background:linear-gradient(180deg,#7fe6b6,#3fae7e)"></i>IRAM · 32BIT (IRAM-first)</span>
-          <span><i
-              style="background:linear-gradient(180deg,#f0bd77,#c98f47);outline:1px dashed #ef6f4e;outline-offset:-1px"></i>CROSS-REGION
-            (opt-in)</span>
-          <span><i
-              style="background:repeating-linear-gradient(45deg,rgba(239,111,78,.4) 0 3px,transparent 3px 6px)"></i>EXEC
-            RESERVE</span>
-        </div>
-      </div>
-      <div class="simstats">
-        <div class="ss">
-          <div class="v" id="stDram">—</div>
-          <div class="l">DRAM free</div>
-        </div>
-        <div class="ss">
-          <div class="v" id="stIram">—</div>
-          <div class="l">IRAM free</div>
-        </div>
-        <div class="ss">
-          <div class="v" id="stAct">0</div>
-          <div class="l">Active descs</div>
-        </div>
-        <div class="ss">
-          <div class="v" id="stFb">0</div>
-          <div class="l">IRAM fb</div>
-        </div>
-        <div class="ss">
-          <div class="v" id="stCross">0</div>
-          <div class="l">Cross-region</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="specs rv">
-    <div class="specbar">
-      <div class="sp">
-        <div class="v">~2 GB</div>
-        <div class="l">Max arena · 31-bit byte offset</div>
-      </div>
-      <div class="sp">
-        <div class="v">4 B</div>
-        <div class="l">Alignment, both arenas</div>
-      </div>
-      <div class="sp">
-        <div class="v">2 KB</div>
-        <div class="l">Table @ 256 descriptors (8 B each)</div>
-      </div>
-      <div class="sp">
-        <div class="v">0 B</div>
-        <div class="l">In-band overhead</div>
-      </div>
-      <div class="sp">
-        <div class="v">2</div>
-        <div class="l">Arenas · DRAM + IRAM</div>
-      </div>
-    </div>
-  </div>
-  <!-- ======================= ARCHITECTURE ======================= -->
-  <section id="how">
-    <div class="shead rv"><span class="idx">01</span>
-      <div>
-        <div class="kicker">Architecture</div>
-        <h2>How the allocator thinks</h2>
-        <p class="sub">Every request is filtered by capability bits. EXEC and pure 32BIT land in IRAM first
-          (EXEC from start, 32BIT from end, reserve between them); only when IRAM is exhausted does the request
-          fall through to DRAM regions, and — only if enabled — cross into another DRAM region as a last resort.</p>
-      </div>
-    </div>
-    <div class="flow rv">
-      <div class="node">
-        <div class="t">heap_caps_malloc()</div>
-        <div class="d">size + caps arrive via <code>--wrap</code></div>
-      </div>
-      <div class="wire"></div>
-      <div class="node">
-        <div class="t">caps filter</div>
-        <div class="d">EXEC / DMA / 8BIT / 32BIT routing</div>
-      </div>
-      <div class="wire"></div>
-      <div class="node iram">
-        <div class="t">IRAM</div>
-        <div class="d">EXEC from start · 32BIT from end (IRAM-first for MALLOC_CAP_32BIT)</div>
-      </div>
-      <div class="wire"></div>
-      <div class="node dram">
-        <div class="t">DRAM regions</div>
-        <div class="d">size-class first-fit · tried after IRAM</div>
-      </div>
-      <div class="wire"></div>
-      <div class="node dram">
-        <div class="t">cross-region*</div>
-        <div class="d">*opt-in, after IRAM + DRAM exhausted</div>
-      </div>
-    </div>
-    <div class="flabel rv">▼ internal structure of one arena</div>
-    <div class="flow rv">
-      <div class="node">
-        <div class="t">s_desc[]</div>
-        <div class="d">sorted 8-byte descriptors, binary search</div>
-      </div>
-      <div class="wire"></div>
-      <div class="node">
-        <div class="t">free space</div>
-        <div class="d">implicit — gaps between descriptors</div>
-      </div>
-      <div class="wire"></div>
-      <div class="node">
-        <div class="t">stats</div>
-        <div class="d">free / min-free / fallback counters</div>
-      </div>
-    </div>
-  </section>
-  <!-- ======================= MEMORY LAYOUT ======================= -->
-  <section id="layout">
-    <div class="shead rv"><span class="idx">02</span>
-      <div>
-        <div class="kicker">Memory layout</div>
-        <h2>Two physical arenas</h2>
-        <p class="sub">DRAM runs from <code>_bss_end</code> to <code>0x40000000</code> and is split into size-class
-          regions.
-          IRAM starts after <code>_iram_end</code> — EXEC blocks grow from the start, 32BIT blocks from the end, with
-          a reserve between.</p>
-      </div>
-    </div>
-    <div class="memrow rv">
-      <div class="mtitle">DRAM — <b>caps: 8BIT · 32BIT · DMA · INTERNAL</b></div>
-      <div class="membar">
-        <div class="seg fw hatch">.data / .bss</div>
-        <div class="seg r0">R0 · 4–132 B · 15%</div>
-        <div class="seg r1">R1 · 132–1024 B · 45%</div>
-        <div class="seg r2">R2 · 1024 B–∞ · 20% + rest</div>
-      </div>
-      <div class="addr"><span>0x3FFE8000</span><span></span><span>0x40000000</span></div>
-    </div>
-    <div class="memrow rv">
-      <div class="mtitle">IRAM — <b>caps: 32BIT · EXEC</b></div>
-      <div class="membar">
-        <div class="seg code hatch">.iram.text (firmware code)</div>
-        <div class="seg ex">EXEC (from start) →</div>
-        <div class="seg rsv">RESERVE</div>
-        <div class="seg free">free</div>
-        <div class="seg fbr">← 32BIT (IRAM-first, from end)</div>
-      </div>
-      <div class="addr"><span>_iram_end</span><span>EXEC grows from start, 32BIT grows from end, reserve between them (default 2048 B)</span><span>0x40100000 + SOC_IRAM_SIZE</span></div>
-    </div>
-  </section>
-  <!-- ======================= POLICY ======================= -->
-  <section id="policy">
-    <div class="shead rv"><span class="idx">03</span>
-      <div>
-        <div class="kicker">Allocation policy</div>
-        <h2>Try it — where does your block land?</h2>
-        <p class="sub">Pick a size and capability bits exactly as your code would. The tester runs the same routing
-          logic as <code>mxr_malloc_caps_locked()</code>.
-          Dashed lanes are armed fallbacks, tried only if the stage above fails.
-          <code>malloc</code>/<code>free</code> are IRAM-resident by default;
-          <code>calloc</code>/<code>zalloc</code>/<code>realloc</code> join them only with
-          <code>CONFIG_MXR_IRAM_PATH_ALLOC_FAMILY</code>.
-        </p>
-      </div>
-    </div>
-    <div class="pt rv">
-      <div class="ptbox">
-        <h4>Request size</h4>
-        <div class="sizerow">
-          <input type="range" id="ptSize" min="4" max="8192" step="4" value="480">
-          <span class="sizev" id="ptSizeV">480 B</span>
-        </div>
-        <h4>Capability bits</h4>
-        <div class="caps" id="ptCaps">
-          <button class="capbtn" data-cap="EXEC">MALLOC_CAP_EXEC</button>
-          <button class="capbtn on" data-cap="S32">MALLOC_CAP_32BIT</button>
-          <button class="capbtn" data-cap="S8">MALLOC_CAP_8BIT</button>
-          <button class="capbtn" data-cap="DMA">MALLOC_CAP_DMA</button>
-          <button class="capbtn" data-cap="INTERNAL">MALLOC_CAP_INTERNAL</button>
-          <button class="capbtn" data-cap="SPIRAM">MALLOC_CAP_SPIRAM</button>
-        </div>
-        <h4>Presets</h4>
-        <div class="presets">
-          <button class="pre" data-p="malloc">malloc()</button>
-          <button class="pre" data-p="dma">DMA buffer</button>
-          <button class="pre" data-p="exec">EXEC code</button>
-          <button class="pre" data-p="wifi">WiFi / LWIP</button>
-          <button class="pre" data-p="spiram">SPIRAM request</button>
-        </div>
-        <button class="btn solid" id="ptGo" style="width:100%">heap_caps_malloc( size, caps )</button>
-      </div>
-      <div class="ptbox">
-        <h4>Routing result</h4>
-        <div class="lane l0" id="lane0"><span class="dot"></span><span class="n">IRAM</span><span class="s"
-            id="lane0s">32BIT from end · EXEC from start</span></div>
-        <div class="lane l1" id="lane1"><span class="dot"></span><span class="n">DRAM REGIONS</span><span class="s" id="lane1s">size-class
-            first-fit (after IRAM)</span></div>
-        <div class="lane l2" id="lane2"><span class="dot"></span><span class="n">CROSS-REGION</span><span
-            class="s">other DRAM regions (opt-in)</span></div>
-        <div class="lane l3" id="lane3"><span class="dot"></span><span class="n">NULL</span><span class="s">request
-            rejected</span></div>
-        <div class="verdict v-iram" id="ptVerdict">IRAM · 32BIT</div>
-        <div class="why" id="ptWhy">size 480 B · MALLOC_CAP_32BIT → IRAM first (from end, respect reserve) → DRAM
-          region Ri → cross-region (opt-in)</div>
-        <div><span class="badge" id="ptBadge">+ DRAM + CROSS-REGION ARMED</span></div>
-      </div>
-    </div>
-    <div class="tblwrap rv" style="margin-top:26px">
-      <table>
-        <thead>
-          <tr>
-            <th>Request</th>
-            <th>Destination</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>malloc / calloc / realloc / zalloc</code></td>
-            <td>IRAM first → DRAM → cross-region</td>
-            <td>matches original SDK behavior; frees DRAM for 8BIT/DMA consumers</td>
-          </tr>
-          <tr>
-            <td><code>MALLOC_CAP_32BIT</code></td>
-            <td>IRAM first → DRAM → cross-region</td>
-            <td>fallback respects EXEC reserve</td>
-          </tr>
-          <tr>
-            <td><code>MALLOC_CAP_8BIT</code> / <code>MALLOC_CAP_DMA</code></td>
-            <td>DRAM only</td>
-            <td>IRAM is not byte-accessible / DMA-capable</td>
-          </tr>
-          <tr>
-            <td><code>MALLOC_CAP_EXEC</code></td>
-            <td>IRAM only</td>
-            <td>allocated from IRAM start</td>
-          </tr>
-          <tr>
-            <td><code>MALLOC_CAP_EXEC | DMA</code></td>
-            <td>NULL</td>
-            <td>impossible combination on ESP8266</td>
-          </tr>
-          <tr>
-            <td>Cross-region fallback</td>
-            <td>Other DRAM regions</td>
-            <td>only if <code>CONFIG_MXR_CROSS_REGION_FALLBACK=y</code> and own region + IRAM exhausted</td>
-          </tr>
-          <tr>
-            <td><code>MALLOC_CAP_SPIRAM</code></td>
-            <td>NULL</td>
-            <td>no SPIRAM on ESP8266</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <!-- ======================= DESCRIPTOR ======================= -->
-  <section id="descriptor">
-    <div class="shead rv"><span class="idx">04</span>
-      <div>
-        <div class="kicker">Descriptor format</div>
-        <h2>Eight bytes per allocation</h2>
-        <p class="sub">Each live block owns one 8-byte descriptor in a sorted table. Bit 31 of <code>off_flags</code>
-          marks the arena;
-          bit 31 of <code>len_flags</code> marks EXEC. Move the sliders — the bit pattern updates live.</p>
-      </div>
-    </div>
-    <div class="desc rv">
-      <div>
-        <div class="wordrow">
-          <div class="wname">off_flags — arena + offset (bytes)</div>
-          <div class="word w-off" id="wOff"></div>
-          <div class="bitidx" id="iOff"></div>
-        </div>
-        <div class="wordrow">
-          <div class="wname">len_flags — exec + length (bytes)</div>
-          <div class="word w-len" id="wLen"></div>
-          <div class="bitidx" id="iLen"></div>
-        </div>
-        <p style="color:var(--dim);font-size:13px;max-width:60ch">31-bit fields cover ~2 GB per arena —
-          enough for any ESP8266 DRAM/IRAM configuration. Because DRAM descriptors always sort before IRAM ones,
-          one binary search serves both arenas.</p>
-      </div>
-      <div class="dlab">
-        <label>OFFSET <input type="range" id="offR" min="0" max="200000" value="5136"><span class="val"
-            id="rOffV">5136</span></label>
-        <label>LENGTH <input type="range" id="lenR" min="1" max="65536" value="1024"><span class="val"
-            id="rLenV">1024</span></label>
-        <div class="tgl">
-          <button class="capbtn" id="iramT">IRAM arena</button>
-          <button class="capbtn" id="execT">EXEC block</button>
-        </div>
-        <div class="readout">
-          <div class="ro">
-            <div class="l">Search key (hex)</div>
-            <div class="v" id="rKey">0x00001410</div>
-          </div>
-          <div class="ro">
-            <div class="l">Resulting pointer</div>
-            <div class="v" id="rPtr">0x3FFE9410</div>
-          </div>
-          <div class="ro" style="grid-column:1/-1">
-            <div class="l">Stored length (binary)</div>
-            <div class="v" id="rLen">0000000000000000000010000000000</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <!-- ======================= REGIONS ======================= -->
-  <section id="regions">
-    <div class="shead rv"><span class="idx">05</span>
-      <div>
-        <div class="kicker">Region configuration</div>
-        <h2>Design your size classes</h2>
-        <p class="sub">Regions are defined by <b>lower boundaries only</b> — <code>"4,132,1024"</code> — so gaps and
-          overlaps are
-          impossible by construction. The last region is always unlimited and absorbs leftover memory. This calculator
-          runs the exact init logic.</p>
-      </div>
-    </div>
-    <div class="calc rv">
-      <div class="crow">
-        <div><label>Lower boundaries, bytes</label><input id="inB" value="4,132,1024" spellcheck="false"></div>
-        <div><label>Memory weights, %</label><input id="inP" value="15,45,20" spellcheck="false"></div>
-        <div><label>Arena size, KB</label><input id="inA" type="number" value="64" min="4" max="2048"></div>
-      </div>
-      <div class="cbar" id="calcBar"></div>
-      <div class="addr"><span>0 bytes</span><span id="calcTotal"></span></div>
-      <div class="ctable" id="calcOut"></div>
-    </div>
-  </section>
-  <!-- ======================= SEARCH ======================= -->
-  <section id="search">
-    <div class="shead rv"><span class="idx">06</span>
-      <div>
-        <div class="kicker">Search strategy</div>
-        <h2>Descriptor gap scan</h2>
-        <p class="sub">v2 removed the optional bitmap mode — the descriptor scan is fast enough for typical
-          embedded workloads and avoids carving bitmap memory out of the arena. The race below shows the scan in
-          action.</p>
-      </div>
-    </div>
-    <div class="race rv">
-      <div>
-        <div class="scanrow" id="scD"></div>
-        <div class="ops" id="dOps">descriptor compares: 0</div>
-      </div>
-    </div>
-    <div class="tblwrap rv" style="margin-top:26px">
-      <table>
-        <thead>
-          <tr>
-            <th>Characteristic</th>
-            <th>Descriptor gap scan (v2)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Extra RAM</td>
-            <td><span class="yes">0 bytes</span></td>
-          </tr>
-          <tr>
-            <td>Scan cost</td>
-            <td>O(active descriptors)</td>
-          </tr>
-          <tr>
-            <td>Best when</td>
-            <td>≤ 512 live allocations</td>
-          </tr>
-          <tr>
-            <td>Covers</td>
-            <td>DRAM + IRAM</td>
-          </tr>
-          <tr>
-            <td>Kconfig</td>
-            <td>(no option, always descriptor)</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <!-- ======================= INSTALL ======================= -->
-  <section id="install">
-    <div class="shead rv"><span class="idx">07</span>
-      <div>
-        <div class="kicker">Installation</div>
-        <h2>Drop-in via linker --wrap</h2>
-        <p class="sub">The original heap component stays in the build; every entry point is redirected at link time.
-          Nothing in the SDK needs to be modified.</p>
-      </div>
-    </div>
-    <div class="steps">
-      <div class="step rv">
-        <div class="stepnum">01</div>
-        <div>
-          <h3>Copy the component</h3>
-          <p>Place the component into your project tree.</p>
-          <div class="code">
-            <div class="chead"><span>shell</span><button class="copy">COPY</button></div>
-            <pre data-lang="bash">cp -r mxr_heap/ &lt;your_project&gt;/components/mxr_heap/</pre>
-          </div>
-        </div>
-      </div>
-      <div class="step rv">
-        <div class="stepnum">02</div>
-        <div>
-          <h3>Configure</h3>
-          <p>All parameters live under the <b>MxR-malloc</b> menu. Defaults are safe for most projects.</p>
-          <div class="code">
-            <div class="chead"><span>shell</span><button class="copy">COPY</button></div>
-            <pre data-lang="bash">idf.py menuconfig
-# → MxR-malloc → regions, IRAM, search mode, wrap options</pre>
-          </div>
-        </div>
-      </div>
-      <div class="step rv">
-        <div class="stepnum">03</div>
-        <div>
-          <h3>Full clean build</h3>
-          <p>Always <code>fullclean</code> after changing MxR Kconfig options — stale <code>sdkconfig</code> values
-            silently override new defaults.</p>
-          <div class="code">
-            <div class="chead"><span>shell</span><button class="copy">COPY</button></div>
-            <pre data-lang="bash">idf.py fullclean
-idf.py build</pre>
-          </div>
-        </div>
-      </div>
-      <div class="step rv">
-        <div class="stepnum">04</div>
-        <div>
-          <h3>Verify at boot</h3>
-          <p>Call <code>mxr_dump()</code> once after startup and check the region table and IRAM status.</p>
-          <div class="code">
-            <div class="chead"><span>C</span><button class="copy">COPY</button></div>
-            <pre data-lang="c">#include "mxr_malloc.h"
-void app_main(void)
-{
-    mxr_dump();   /* regions, IRAM, descriptor table, stats */
-}</pre>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <!-- ======================= KCONFIG ======================= -->
-  <section id="kconfig">
-    <div class="shead rv"><span class="idx">08</span>
-      <div>
-        <div class="kicker">Configuration</div>
-        <h2>Kconfig reference</h2>
-      </div>
-    </div>
-    <div class="tblwrap rv">
-      <table>
-        <thead>
-          <tr>
-            <th>Option</th>
-            <th>Default</th>
-            <th>Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><span class="opt">MXR_MAX_DESC</span></td>
-            <td>256</td>
-            <td>Max simultaneous allocations, shared by DRAM + IRAM. 2 KB table at 256 (8 B per descriptor).</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_DESC_IN_DRAM / _IRAM_TEXT / _IRAM_BSS</span></td>
-            <td>DRAM</td>
-            <td>Descriptor table placement: DRAM <code>.bss</code> (default), IRAM <code>.iram0.text</code> (no patch, but the table is in the binary), or IRAM <code>.iram0.bss</code> (smaller binary, but requires a patched linker script).</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_USE_IRAM</span></td>
-            <td>y</td>
-            <td>Enable IRAM arena: EXEC allocations + IRAM-first pool for MALLOC_CAP_32BIT (matches original SDK).</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_IRAM_RESERVE_BYTES</span></td>
-            <td>2048</td>
-            <td>IRAM kept aside for EXEC; non-EXEC fallback cannot consume it.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_IRAM_FALLBACK_MAX_BYTES</span></td>
-            <td>0 (∞)</td>
-            <td>Cap on a single non-EXEC block allowed into IRAM.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_CROSS_REGION_FALLBACK</span></td>
-            <td>n</td>
-            <td>Cross-region DRAM fallback (last resort, opt-in). Causes fragmentation of large-block regions.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_REGIONS</span></td>
-            <td>3</td>
-            <td>Total DRAM regions (1..16); the last one is always unlimited.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_REGION_SIZES</span></td>
-            <td>"4,132,1024"</td>
-            <td>Lower block-size boundaries in bytes.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_REGION_PERCENTS</span></td>
-            <td>"15,45,20"</td>
-            <td>Memory weights; sum ≤ 100, leftover goes to the last region.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_COMPACT_TYPES</span></td>
-            <td>y</td>
-            <td>Use <code>uint16</code> for caps/min/max/alloc_count where possible (ESP8266). Disable for ESP32 or size classes > 64 KB.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_DUMP_MINIMAL / _NORMAL / _FULL</span></td>
-            <td>NORMAL</td>
-            <td>Diagnostics output level: totals only / + regions and counters / + every descriptor.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_REALLOC_ZERO_FREES</span> <span class="no">(header macro)</span></td>
-            <td>1</td>
-            <td><code>realloc(ptr, 0)</code> frees and returns NULL (glibc/ESP-IDF style). Set to 0 to allocate a minimal block.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_IRAM_HOT_PATH_DISABLED</span></td>
-            <td>n</td>
-            <td>Move malloc/free hot path out of IRAM when IRAM is tight.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_IRAM_PATH_CORE / _ALLOC_FAMILY</span></td>
-            <td>CORE</td>
-            <td>IRAM hot path scope: malloc/free only (CORE) or + calloc/zalloc/realloc (ALLOC_FAMILY). Active when
-              MXR_IRAM_HOT_PATH_DISABLED=n.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_WRAP_HEAP_QUERY / _DEFAULT_POOL / _ESP_SYSTEM</span></td>
-            <td>y</td>
-            <td>Wrap heap query, default-pool and esp_system free-size functions.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_WRAP_LIBC</span></td>
-            <td>n</td>
-            <td>Directly wrap plain malloc/free/calloc/realloc/zalloc.</td>
-          </tr>
-          <tr>
-            <td><span class="opt">MXR_WARN_HEAP_TRACING</span></td>
-            <td>y</td>
-            <td>Build warning if incompatible CONFIG_HEAP_TRACING is enabled.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <!-- ======================= API ======================= -->
-  <section id="api">
-    <div class="shead rv"><span class="idx">09</span>
-      <div>
-        <div class="kicker">API reference</div>
-        <h2>Public interface</h2>
-        <p class="sub">Everything routes through <code>mxr_malloc_caps()</code>. The ESP heap API is intercepted
-          transparently via <code>--wrap</code>, so SDK and LWIP allocations flow into MxR without changes.</p>
-      </div>
-    </div>
-    <div class="code rv">
-      <div class="chead"><span>mxr_malloc.h — core</span><button class="copy">COPY</button></div>
-      <pre data-lang="c">/* lifecycle + plain API */
-void  mxr_init(void);
-void *mxr_malloc(size_t size);
-void  mxr_free(void *ptr);
-void *mxr_calloc(size_t count, size_t size);
-void *mxr_realloc(void *ptr, size_t size);
-void *mxr_zalloc(size_t size);
-/* capability-aware API */
-void *mxr_malloc_caps(size_t size, uint32_t caps);
-void *mxr_calloc_caps(size_t count, size_t size, uint32_t caps);
-void *mxr_realloc_caps(void *ptr, size_t newsize, uint32_t caps);
-void *mxr_zalloc_caps(size_t size, uint32_t caps);
-/* query + diagnostics */
-size_t mxr_get_free_size_caps(uint32_t caps);
-size_t mxr_get_min_free_size_caps(uint32_t caps);
-void   mxr_get_status(mxr_status_t *status);
-bool   mxr_get_region_status(int region_index, mxr_region_status_t *status);
-void   mxr_dump(void);</pre>
-    </div>
-    <div class="tblwrap rv">
-      <table>
-        <thead>
-          <tr>
-            <th>Intercepted symbol</th>
-            <th>Routes to</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>_heap_caps_malloc / _free / _calloc / _realloc / _zalloc</code></td>
-            <td>mxr_*_caps equivalents</td>
-          </tr>
-          <tr>
-            <td><code>heap_caps_init</code></td>
-            <td><code>mxr_init()</code></td>
-          </tr>
-          <tr>
-            <td><code>heap_caps_get_free_size / get_minimum_free_size / get_dram_free_size</code></td>
-            <td>mxr query functions</td>
-          </tr>
-          <tr>
-            <td><code>esp_get_free_heap_size / minimum / internal</code></td>
-            <td>mxr query functions</td>
-          </tr>
-          <tr>
-            <td><code>heap_caps_malloc_default / realloc_default</code></td>
-            <td>mxr 32BIT equivalents</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <!-- ======================= EXAMPLES + DIAGNOSTICS ======================= -->
-  <section id="examples">
-    <div class="shead rv"><span class="idx">10</span>
-      <div>
-        <div class="kicker">Usage &amp; diagnostics</div>
-        <h2>In practice</h2>
-      </div>
-    </div>
-    <div class="code rv">
-      <div class="chead"><span>C — typical usage</span><button class="copy">COPY</button></div>
-      <pre data-lang="c">/* ordinary allocation: IRAM first (32BIT), DRAM if IRAM cannot fit */
-char *buf = malloc(1024);
-/* DMA-safe buffer: always DRAM, never IRAM */
-void *dma = heap_caps_malloc(512, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
-/* executable memory: IRAM only */
-void *code = heap_caps_malloc(256, MALLOC_CAP_EXEC | MALLOC_CAP_32BIT);
-/* health check */
-mxr_status_t st;
-mxr_get_status(&amp;st);
-printf("free=%u min=%u desc=%u/%u iram_fb=%u cross=%u invalid_free=%u\n",
-       (unsigned)st.free_bytes, (unsigned)st.min_free_bytes,
-       (unsigned)st.active_allocs, (unsigned)st.desc_capacity,
-       (unsigned)st.iram_fallback_allocs, (unsigned)st.cross_region_allocs,
-       (unsigned)st.invalid_free_attempts);</pre>
-    </div>
-    <div class="uart rv" id="uart">
-      <div class="ln"><span class="tg">I (231) mxr_malloc:</span> init ok: base=0x3ffe9a40 bytes=61728 desc=DRAM(.bss) 2048 bytes</div>
-      <div class="ln"><span class="tg">I (234) mxr_malloc:</span> <span class="ir">IRAM heap ok: base=0x4010a1b0 bytes=16304</span></div>
-      <div class="ln"><span class="tg">I (240) mxr_malloc:</span> MxR dump: initialized=1 · search mode: descriptor (bytes)</div>
-      <div class="ln"><span class="tg">I (246) mxr_malloc:</span> total=<span class="hl">78032</span> free=<span class="hl">74120</span> min_free=73984 largest=45056</div>
-      <div class="ln"><span class="tg">I (252) mxr_malloc:</span> desc used=14/256 max_used=17 desc=DRAM 2048 bytes · exec=0 iram_fb=8 cross_region=0</div>
-      <div class="ln"><span class="tg">I (258) mxr_malloc:</span> region 0: start=0 total=9256 min=4 max=132 free=9256 alloc=6</div>
-      <div class="ln"><span class="tg">I (264) mxr_malloc:</span> region 1: start=9256 total=27776 min=132 max=1024 free=27776 alloc=5</div>
-      <div class="ln"><span class="tg">I (270) mxr_malloc:</span> region 2: start=37032 total=24696 min=1024 max=0 free=24696 alloc=3</div>
-    </div>
-  </section>
-  <!-- ======================= COMPARISON ======================= -->
-  <section id="compare">
-    <div class="shead rv"><span class="idx">11</span>
-      <div>
-        <div class="kicker">Comparison</div>
-        <h2>MxR vs the original heap</h2>
-      </div>
-    </div>
-    <div class="tblwrap rv">
-      <table>
-        <thead>
-          <tr>
-            <th>Feature</th>
-            <th>Original ESP8266 heap</th>
-            <th>MxR-malloc</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Metadata location</td>
-            <td>in-band, 8 B per block</td>
-            <td><span class="yes">out-of-band table, 8 B per entry</span></td>
-          </tr>
-          <tr>
-            <td>Free-space structure</td>
-            <td>linked free list per region</td>
-            <td>sorted descriptors (bitmap removed in v2)</td>
-          </tr>
-          <tr>
-            <td>Allocation search</td>
-            <td>O(N) list walk</td>
-            <td>O(N) gap scan (descriptor only)</td>
-          </tr>
-          <tr>
-            <td>Max simultaneous allocations</td>
-            <td>memory-bound</td>
-            <td><code>CONFIG_MXR_MAX_DESC</code> (hard cap)</td>
-          </tr>
-          <tr>
-            <td>Size-class regions</td>
-            <td><span class="no">no</span></td>
-            <td><span class="yes">yes, configurable</span></td>
-          </tr>
-          <tr>
-            <td>IRAM usage</td>
-            <td>IRAM tried <b>first</b> for 32BIT</td>
-            <td><span class="yes">IRAM first for 32BIT (matches original SDK)</span></td>
-          </tr>
-          <tr>
-            <td>Cross-region fallback</td>
-            <td><span class="no">no</span></td>
-            <td><span class="yes">yes (opt-in, last resort)</span></td>
-          </tr>
-          <tr>
-            <td>EXEC memory</td>
-            <td>IRAM</td>
-            <td>IRAM (with reserve protection)</td>
-          </tr>
-          <tr>
-            <td>Heap tracing / poisoning</td>
-            <td>CONFIG_HEAP_TRACING / POISONING</td>
-            <td><span class="no">not supported — disable both</span></td>
-          </tr>
-          <tr>
-            <td>Locking</td>
-            <td><code>vPortETSIntrLock</code></td>
-            <td>same primitive, same semantics</td>
-          </tr>
-          <tr>
-            <td>Per-block heap overhead</td>
-            <td>8 bytes</td>
-            <td><span class="yes">0 bytes in arena</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <!-- ======================= FAQ ======================= -->
-  <section id="faq">
-    <div class="shead rv"><span class="idx">12</span>
-      <div>
-        <div class="kicker">FAQ</div>
-        <h2>Questions that actually come up</h2>
-      </div>
-    </div>
-    <div class="rv">
-      <details>
-        <summary>Why does esp_get_free_heap_size() differ from the original heap?</summary>
-        <div class="ans">v2 routes <code>MALLOC_CAP_32BIT</code> to IRAM first, matching the original SDK. The numbers
-          should now be close; remaining differences come from MxR's EXEC reserve and the descriptor-table cap. Compare
-          apples to apples with <code>heap_caps_get_dram_free_size()</code> — it returns DRAM only in both implementations.
-        </div>
-      </details>
-      <details>
-        <summary>What happens when the descriptor table fills up?</summary>
-        <div class="ans"><code>malloc</code> returns NULL even though memory is free — this is the one failure mode the
-          original heap doesn't have. Watch <code>alloc_fail_table_full</code> and <code>max_active_allocs</code> in
-          <code>mxr_get_status()</code>; raise <code>CONFIG_MXR_MAX_DESC</code> if you approach the cap. 256 covers
-          typical WiFi + LWIP workloads.
-        </div>
-      </details>
-      <details>
-        <summary>What is cross-region fallback and why is it off by default?</summary>
-        <div class="ans">When <code>CONFIG_MXR_CROSS_REGION_FALLBACK=y</code>, if a block's own size-class region and
-          IRAM are both exhausted, the allocator tries other DRAM regions, picking the one with the smallest
-          <code>min_bytes</code>. It's off by default because dropping a small block into a large-block region fragments
-          it. v2 removed the <code>CONFIG_MXR_CROSS_REGION_AFTER_IRAM</code> toggle — order is now fixed: IRAM → DRAM →
-          cross-region. Watch <code>cross_region_allocs</code> — if it grows, enlarge the own region's percent instead.
-        </div>
-      </details>
-      <details>
-        <summary>Can I keep CONFIG_HEAP_TRACING enabled?</summary>
-        <div class="ans">No. The original tracing walks <code>multi_heap</code> structures that don't exist in MxR.
-          Disable it — MxR emits a build warning if it's on. Same applies to heap poisoning.</div>
-      </details>
-      <details>
-        <summary>Is MxR safe to call from ISRs?</summary>
-        <div class="ans">No — same as the original heap. <code>malloc</code>/<code>free</code> must not be called from
-          interrupt handlers.</div>
-      </details>
-      <details>
-        <summary>Why aren't calloc/realloc in IRAM by default?</summary>
-        <div class="ans">To keep the IRAM footprint small — only <code>malloc</code>/<code>free</code> are IRAM-resident
-          by default. Enable <code>CONFIG_MXR_IRAM_PATH_ALLOC_FAMILY</code> to place
-          <code>calloc</code>/<code>zalloc</code>/<code>realloc</code> in IRAM too (for code running during flash
-          write/erase), then verify with <code>idf.py size</code>. The allocator is still not ISR-safe.
-        </div>
-      </details>
-      <details>
-        <summary>Why is DRAM aligned to 4 bytes instead of 1?</summary>
-        <div class="ans">One unified descriptor format serves both arenas (IRAM is 4-byte-only hardware). The cost is at
-          most ~3 bytes per block — roughly 50–1000 B across a busy system — in exchange for a 4-byte descriptor and
-          identical handling of DRAM and IRAM.</div>
-      </details>
-      <details>
-        <summary>What does realloc(ptr, 0) do?</summary>
-        <div class="ans">By default it frees the block and returns NULL (glibc / ESP-IDF style), controlled by
-          <code>MXR_REALLOC_ZERO_FREES</code> in the header. Set it to 0 to restore the allocate-minimal-block behavior.
-        </div>
-      </details>
-      <details>
-        <summary>What changed between v1 and v2?</summary>
-        <div class="ans">v2 doubles the descriptor to 8 bytes (byte-granular offsets/lengths, ~2 GB max), routes
-          <code>MALLOC_CAP_32BIT</code> to IRAM first (matching the original SDK), removes the bitmap search mode,
-          adds configurable descriptor placement (DRAM/IRAM .text/IRAM .bss), adds compact type widths for ESP8266,
-          and adds a selectable diagnostics verbosity. <code>realloc(ptr, 0)</code> now follows glibc/ESP-IDF semantics
-          by default.
-        </div>
-      </details>
-      <details>
-        <summary>Where does the descriptor table live?</summary>
-        <div class="ans">Default is DRAM <code>.bss</code> (safest, no linker mods). For code that must allocate while
-          the flash cache is off, choose IRAM <code>.iram0.text</code> (no patch, but the table is in the binary) or
-          IRAM <code>.iram0.bss</code> (smaller binary, but requires patching <code>esp8266.project.ld.in</code> to add
-          the <code>*(.iram0.bss .iram0.bss.*)</code> wildcard).
-        </div>
-      </details>
-      <details>
-        <summary>Will this work on ESP32?</summary>
-        <div class="ans">No. The memory map (<code>_bss_end</code>, <code>_iram_end</code>, <code>0x40000000</code>),
-          the locking primitive and the heap API are ESP8266-specific by design.</div>
-      </details>
-    </div>
-  </section>
-  <!-- ======================= FOOTER ======================= -->
-  <footer>
-    <div class="fgrid">
-      <div>
-        <div class="fh">About</div>
-        <p class="fabout">Compact descriptor-based memory allocator for ESP8266 RTOS SDK. Zero in-band overhead,
-          size-class DRAM regions, IRAM-first routing for MALLOC_CAP_32BIT, opt-in cross-region last resort, EXEC support,
-          configurable descriptor placement (DRAM/IRAM .text/IRAM .bss), compact type widths, selectable diagnostics
-          verbosity, configurable IRAM hot path scope.
-          Drop-in replacement via linker <code style="color:var(--copper2)">--wrap</code>.</p>
-        <div class="fh" style="margin-top:26px">Topics</div>
-        <div class="topics">
-          <span class="topic">esp8266</span><span class="topic">memory-allocator</span><span class="topic">heap</span>
-          <span class="topic">embedded</span><span class="topic">freertos</span><span
-            class="topic">memory-management</span>
-          <span class="topic">esp8266-rtos-sdk</span><span class="topic">xtensa</span><span class="topic">c</span><span
-            class="topic">iot</span>
-        </div>
-      </div>
-      <div>
-        <div class="fh">Component layout</div>
-        <div class="tree">mxr_heap/
-          ├── <b>CMakeLists.txt</b> <span style="color:var(--dim)"># wrap flags</span>
-          ├── <b>Kconfig.projbuild</b> <span style="color:var(--dim)"># menuconfig</span>
-          ├── include/
-          │ └── <b>mxr_malloc.h</b>
-          ├── <b>mxr_malloc.c</b> <span style="color:var(--dim)"># core, ~2500 ln</span>
-          └── <b>mxr_heap_wrap.c</b> <span style="color:var(--dim)"># --wrap layer</span></div>
-      </div>
-      <div>
-        <div class="fh">Build modes</div>
-        <div class="tree"><b>wrap</b> (default)
-          mxr_malloc.c + mxr_heap_wrap.c
-          original heap stays, calls redirected
-          <b>compat / port</b> (alternative)
-          original heap excluded from build
-          <span style="color:var(--coral)">never mix with wrap mode</span>
-        </div>
-      </div>
-    </div>
-    <div class="fbot">MIT License · built for ESP8266 · Xtensa LX106 · FreeRTOS · IRAM-first 32BIT, DRAM regions,
-      cross-region last</div>
-  </footer>
+
   <script>
-    (function () {
-      "use strict";
-      const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-      /* ================= syntax highlight ================= */
-      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      function hl(src, lang) {
-        let s = esc(src);
-        s = s.replace(/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g, '\u0001C$1\u0002');
-        s = s.replace(/("(?:[^"\\\n]|\\.)*")/g, '\u0001S$1\u0002');
-        s = s.replace(/(^|\n)([ \t]*#[a-zA-Z_]+)/g, '$1\u0001P$2\u0002');
-        const kw = /\b(void|uint8_t|uint16_t|uint32_t|uintptr_t|size_t|bool|static|inline|const|return|if|else|for|while|struct|typedef|extern|char|int|true|false|NULL|config|menu|endmenu|choice|endchoice|range|default|depends|help|string|prompt|bool|idf_component_register|target_link_libraries|list|append|endif|set|message|idf\.py|make|cp)\b/g;
-        s = s.replace(kw, '\u0001K$1\u0002');
-        s = s.replace(/\b(0x[0-9A-Fa-f]+|\d+)\b/g, '\u0001N$1\u0002');
-        return s.replace(/\u0001([CSPKN])/g, (m, t) => '<span class="tk-' + t.toLowerCase() + '">').replace(/\u0002/g, '</span>');
-      }
-      $$('pre[data-lang]').forEach(pre => { pre.innerHTML = hl(pre.textContent, pre.dataset.lang) });
-      /* ================= copy buttons ================= */
-      $$('.copy').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const pre = btn.closest('.code').querySelector('pre');
-          navigator.clipboard.writeText(pre.textContent).then(() => {
-            btn.textContent = 'DONE ✓'; setTimeout(() => btn.textContent = 'COPY', 1300);
+    const A = 4, AM = 3;
+    const CAP_EXEC = 1, CAP_32 = 2, CAP_8 = 4, CAP_DMA = 8, CAP_SPIRAM = 1024, CAP_INT = 2048;
+    const DRAM_CAPS = CAP_8 | CAP_32 | CAP_DMA | CAP_INT;
+    function al4(b) { return (b + AM) & ~AM; }
+
+    function regionColor(i, total) {
+      const hue = (i * 360 / Math.max(total, 1) + 210) % 360;
+      return `hsl(${hue}, 72%, 52%)`;
+    }
+    function regionColorDark(i, total) {
+      const hue = (i * 360 / Math.max(total, 1) + 210) % 360;
+      return `hsl(${hue}, 72%, 42%)`;
+    }
+    const EXEC_COLOR = '#8b5cf6';
+    const EXEC_COLOR_D = '#7c3aed';
+    const FALLBACK_COLOR = '#ec4899';
+    const FALLBACK_COLOR_D = '#db2777';
+    const CROSS_COLOR = '#eab308';
+    const CROSS_COLOR_D = '#ca8a04';
+
+    class MxR {
+      constructor() { this.ok = false; this.map = new Map(); this.offIndex = new Map(); this.idc = 0; }
+      init(c) {
+        this.dramTotal = al4(c.dramSize); this.maxDesc = c.maxDesc;
+        this.maxIDesc = c.maxIramDesc; this.iramRes = al4(c.iramReserve);
+        this.iramFbMax = al4(c.iramFallbackMax || 0);
+        this.cross = c.crossRegion; this.regions = []; this.dDesc = []; this.iDesc = [];
+        if (c.useIram) {
+          this.iramOn = true; this.iramTotal = al4(c.iramSize);
+          this.iramFree = this.iramTotal; this.iramMinFree = this.iramTotal;
+        } else { this.iramOn = false; this.iramTotal = 0; this.iramFree = 0; }
+        const es = c.regionConfig.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        const cfgs = [];
+        for (const e of es) {
+          const m = e.match(/^(\d+)-(\d+)%$/);
+          if (!m) { addLog(`Bad region: '${e}'`, 'error'); return false; }
+          cfgs.push({ min: +m[1], pct: +m[2] });
+        }
+        if (cfgs.length <= 1) {
+          const mb = cfgs.length === 1 ? Math.max(al4(cfgs[0].min), A) : A;
+          this.regions.push({
+            caps: DRAM_CAPS, start: 0, total: this.dramTotal, min: mb, max: 0,
+            free: this.dramTotal, minFree: this.dramTotal, allocs: 0
           });
-        });
-      });
-      /* ================= reveals + uart + scrollspy + progress ================= */
-      const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target) } }), { threshold: .12 });
-      $$('.rv,.uart').forEach(el => io.observe(el));
-      const secs = $$('section[id]'), links = $$('#nav a');
-      addEventListener('scroll', () => {
-        const h = document.documentElement;
-        $('#prog').style.width = (h.scrollTop / (h.scrollHeight - h.clientHeight) * 100) + '%';
-        let cur = '';
-        secs.forEach(s => { if (s.getBoundingClientRect().top < 140) cur = s.id });
-        links.forEach(a => a.classList.toggle('cur', a.getAttribute('href') === '#' + cur));
-      }, { passive: true });
-      /* ================= live arena simulator ================= */
-      const SIM = {
-        dram: 20800, iram: 4800, reserve: 800, seq: 0, fb: 0, cross: 0, blocks: new Map(),
-        regs: [{ lo: 0, hi: 3200, min: 4, max: 128 }, { lo: 3200, hi: 12400, min: 132, max: 1020 }, { lo: 12400, hi: 20800, min: 1024, max: 99999 }]
-      };
-      const dramBar = $('#dramBar'), iramBar = $('#iramBar');
-      [[3200, 'R0|R1'], [12400, 'R1|R2']].forEach(([u, lbl]) => {
-        const t = document.createElement('div'); t.className = 'tick'; t.style.left = (u / SIM.dram * 100) + '%'; dramBar.appendChild(t);
-        const l = document.createElement('div'); l.className = 'ticklbl'; l.style.left = (u / SIM.dram * 100) + '%'; l.textContent = lbl.split('|')[1]; dramBar.appendChild(l);
-      });
-      const used = a => { let u = 0; SIM.blocks.forEach(b => { if (b.arena === a) u += b.len }); return u };
-      function gap(arena, lo, hi, units, fromEnd) {
-        const bs = [...SIM.blocks.values()].filter(b => b.arena === arena).sort((a, b) => a.off - b.off);
-        if (!fromEnd) {
-          let cur = lo;
-          for (const b of bs) { if (b.off >= hi) break; if (b.off > cur && b.off - cur >= units) return cur; cur = Math.max(cur, b.off + b.len); if (cur >= hi) break }
-          return hi - cur >= units ? cur : -1
-        }
-        let cand = hi;
-        for (let i = bs.length - 1; i >= 0; i--) {
-          const b = bs[i]; if (b.off < lo) break; const be = b.off + b.len;
-          if (cand - be >= units) return cand - units; if (b.off < cand) cand = b.off
-        }
-        return cand - lo >= units ? cand - units : -1;
-      }
-      function barOf(a) { return a === 'dram' ? dramBar : iramBar }
-      function renderB(b, isNew) {
-        const total = b.arena === 'dram' ? SIM.dram : SIM.iram; const bar = barOf(b.arena);
-        let el = bar.querySelector('[data-id="' + b.id + '"]');
-        if (!el) { el = document.createElement('div'); el.className = 'blk ' + (b.exec ? 'exec' : b.fb ? 'fb' : b.cross ? 'dram cross' : 'dram'); el.dataset.id = b.id; bar.appendChild(el) }
-        el.style.left = (b.off / total * 100) + '%'; el.style.width = (b.len / total * 100) + '%';
-        if (isNew) { el.classList.remove('new'); void el.offsetWidth; el.classList.add('new') }
-      }
-      function simFree() {
-        if (!SIM.blocks.size) return;
-        const ids = [...SIM.blocks.keys()]; const id = ids[Math.random() * ids.length | 0];
-        const b = SIM.blocks.get(id); SIM.blocks.delete(id);
-        const el = barOf(b.arena).querySelector('[data-id="' + id + '"]');
-        if (el) { el.classList.add('die'); setTimeout(() => el.remove(), 320) }
-      }
-      function simAlloc() {
-        if (SIM.blocks.size > 42) { simFree(); return }
-        const r = Math.random(); let units, exec = false;
-        if (r < .07) { exec = true; units = 8 + (Math.random() * 36 | 0) }
-        else { const s = Math.random(); units = s < .66 ? 4 + (Math.random() * 32 | 0) : s < .92 ? 36 + (Math.random() * 60 | 0) : 96 + (Math.random() * 112 | 0) }
-        let placed = null;
-        if (exec) { const off = gap('iram', 0, SIM.iram, units, false); if (off >= 0) { placed = { off, len: units, arena: 'iram', exec: true } } }
-        else {
-          /* IRAM first (from end, respects reserve) — IRAM-first for MALLOC_CAP_32BIT */
-          if (SIM.iram - used('iram') - units >= SIM.reserve) {
-            const off = gap('iram', 0, SIM.iram, units, true);
-            if (off >= 0) { placed = { off, len: units, arena: 'iram', fb: true }; SIM.fb++ }
+        } else {
+          let rem = this.dramTotal, st = 0;
+          for (let i = 0; i < cfgs.length; i++) {
+            const mb = Math.max(al4(cfgs[i].min), A);
+            const mx = (i === cfgs.length - 1) ? 0 : Math.max(al4(cfgs[i + 1].min), A) - 1;
+            let b = (i === cfgs.length - 1 && cfgs[i].pct === 0) ? rem : al4(Math.floor(this.dramTotal * cfgs[i].pct / 100));
+            if (b < mb) b = mb;
+            if (b > rem) { addLog(`Region ${i} too large`, 'error'); return false; }
+            this.regions.push({ caps: DRAM_CAPS, start: st, total: b, min: mb, max: mx, free: b, minFree: b, allocs: 0 });
+            st += b; rem -= b;
           }
-          /* DRAM own region (tried after IRAM) */
-          if (!placed) {
-            const g = SIM.regs.find(g => units >= g.min && units <= g.max);
-            if (g) { const off = gap('dram', g.lo, g.hi, units, false); if (off >= 0) placed = { off, len: units, arena: 'dram' } }
-            /* cross-region fallback: last resort, try other DRAM regions (opt-in) */
-            if (!placed) {
-              for (const g2 of SIM.regs) {
-                if (g2 === g) continue;
-                const off2 = gap('dram', g2.lo, g2.hi, units, false);
-                if (off2 >= 0) { placed = { off: off2, len: units, arena: 'dram', cross: true }; SIM.cross++; break }
+          if (rem > 0) {
+            const l = this.regions[this.regions.length - 1];
+            l.total += rem; l.free = l.total; l.minFree = l.free;
+          }
+        }
+        let tot = this.dramTotal, fr = this.dramTotal;
+        if (this.iramOn) { tot += this.iramTotal; fr += this.iramTotal; }
+        this.stats = {
+          total: tot, free: fr, minFree: tot,
+          largest: Math.max(...this.regions.map(r => r.total), this.iramOn ? this.iramTotal : 0),
+          active: 0, maxActive: 0, exec: 0, fb: 0, cross: 0, failMem: 0, failTbl: 0, badFree: 0
+        };
+        this.map.clear(); this.offIndex.clear(); this.idc = 0; this.ok = true; return true;
+      }
+      _idxKey(arena, off) { return arena + '_' + off; }
+      _idxAdd(id, arena, off) { this.offIndex.set(this._idxKey(arena, off), id); }
+      _idxDel(arena, off) { this.offIndex.delete(this._idxKey(arena, off)); }
+      _idxGet(arena, off) { return this.offIndex.get(this._idxKey(arena, off)); }
+      regForSize(len, caps) {
+        for (let i = 0; i < this.regions.length; i++) {
+          const r = this.regions[i];
+          if ((r.caps & caps) !== caps) continue; if (len < r.min) continue;
+          if (r.max !== 0 && len > r.max) continue; return i;
+        } return -1;
+      }
+      regByOff(off) {
+        for (let i = 0; i < this.regions.length; i++) {
+          const r = this.regions[i];
+          if (off >= r.start && off < r.start + r.total) return i;
+        } return -1;
+      }
+      findFree(ri, bytes) {
+        const rs = this.regions[ri].start, re = rs + this.regions[ri].total;
+        let cur = rs;
+        for (const d of this.dDesc) {
+          if (d.off + d.len <= rs) continue; if (d.off >= re) break;
+          if (d.off > cur && d.off - cur >= bytes) return cur;
+          if (d.off + d.len > cur) cur = d.off + d.len;
+          if (cur >= re) break;
+        }
+        if (re > cur && re - cur >= bytes) return cur;
+        return -1;
+      }
+      dInsert(off, len) {
+        if (len === 0 || off + len > this.dramTotal) return false;
+        if (this.dDesc.length >= this.maxDesc) { this.stats.failTbl++; return false; }
+        let p = 0; while (p < this.dDesc.length && this.dDesc[p].off < off) p++;
+        if (p < this.dDesc.length && this.dDesc[p].off === off) return false;
+        if (p > 0 && this.dDesc[p - 1].off + this.dDesc[p - 1].len > off) return false;
+        if (p < this.dDesc.length && off + len > this.dDesc[p].off) return false;
+        this.dDesc.splice(p, 0, { off, len, exec: false }); return true;
+      }
+      dFind(off) {
+        let l = 0, r = this.dDesc.length;
+        while (l < r) {
+          const m = (l + r) >> 1; if (this.dDesc[m].off === off) return m;
+          if (this.dDesc[m].off < off) l = m + 1; else r = m;
+        } return -1;
+      }
+      iInsert(off, len, exec) {
+        if (!this.iramOn || len === 0 || off + len > this.iramTotal) return false;
+        if (this.iDesc.length >= this.maxIDesc) { this.stats.failTbl++; return false; }
+        let p = 0; while (p < this.iDesc.length && this.iDesc[p].off < off) p++;
+        if (p < this.iDesc.length && this.iDesc[p].off === off) return false;
+        if (p > 0 && this.iDesc[p - 1].off + this.iDesc[p - 1].len > off) return false;
+        if (p < this.iDesc.length && off + len > this.iDesc[p].off) return false;
+        this.iDesc.splice(p, 0, { off, len, exec }); return true;
+      }
+      iFind(off) {
+        let l = 0, r = this.iDesc.length;
+        while (l < r) {
+          const m = (l + r) >> 1; if (this.iDesc[m].off === off) return m;
+          if (this.iDesc[m].off < off) l = m + 1; else r = m;
+        } return -1;
+      }
+      iFreeStart(bytes) {
+        let cur = 0;
+        for (const d of this.iDesc) {
+          if (d.off > cur && d.off - cur >= bytes) return cur;
+          if (d.off + d.len > cur) cur = d.off + d.len;
+        }
+        if (this.iramTotal > cur && this.iramTotal - cur >= bytes) return cur;
+        return -1;
+      }
+      iFreeEnd(bytes) {
+        let ce = this.iramTotal;
+        for (let i = this.iDesc.length - 1; i >= 0; i--) {
+          const d = this.iDesc[i], be = d.off + d.len;
+          if (ce > be && ce - be >= bytes) return ce - bytes;
+          if (d.off < ce) ce = d.off;
+        }
+        if (ce >= bytes) return ce - bytes; return -1;
+      }
+      iCanFb(bytes) {
+        if (!this.iramOn || this.iDesc.length >= this.maxIDesc) return false;
+        if (this.iramFree < bytes) return false;
+        if (this.iramFree < bytes + this.iramRes) return false;
+        if (this.iramFbMax !== 0 && bytes > this.iramFbMax) return false;
+        return true;
+      }
+      iCanGrowFb(oldBytes, newBytes) {
+        if (!this.iramOn) return false;
+        if (newBytes <= oldBytes) return true;
+        const extra = newBytes - oldBytes;
+        if (this.iramFree < extra + this.iramRes) return false;
+        if (this.iramFbMax !== 0 && newBytes > this.iramFbMax) return false;
+        return true;
+      }
+      regAlloc(ri, b) {
+        if (ri >= 0 && ri < this.regions.length) {
+          const r = this.regions[ri];
+          r.free = Math.max(0, r.free - b); if (r.free < r.minFree) r.minFree = r.free;
+        }
+        this.stats.free = Math.max(0, this.stats.free - b);
+        if (this.stats.free < this.stats.minFree) this.stats.minFree = this.stats.free;
+      }
+      regRelease(ri, b) {
+        if (ri >= 0 && ri < this.regions.length) {
+          const r = this.regions[ri];
+          r.free = Math.min(r.total, r.free + b);
+        }
+        this.stats.free = Math.min(this.stats.total, this.stats.free + b);
+      }
+      iAlloc(b) {
+        this.iramFree = Math.max(0, this.iramFree - b);
+        if (this.iramFree < this.iramMinFree) this.iramMinFree = this.iramFree;
+        this.stats.free = Math.max(0, this.stats.free - b);
+        if (this.stats.free < this.stats.minFree) this.stats.minFree = this.stats.free;
+      }
+      iRelease(b) {
+        this.iramFree = Math.min(this.iramTotal, this.iramFree + b);
+        this.stats.free = Math.min(this.stats.total, this.stats.free + b);
+      }
+      tryCross(bytes, caps, skip) {
+        const tried = new Set(); if (skip >= 0) tried.add(skip);
+        for (; ;) {
+          let best = -1, bm = Infinity;
+          for (let i = 0; i < this.regions.length; i++) {
+            if (tried.has(i)) continue;
+            if ((this.regions[i].caps & caps) !== caps) continue;
+            if (this.regions[i].free < bytes) continue;
+            if (this.regions[i].min < bm) { bm = this.regions[i].min; best = i; }
+          }
+          if (best < 0) return null;
+          tried.add(best);
+          const off = this.findFree(best, bytes);
+          if (off < 0) continue;
+          if (!this.dInsert(off, bytes)) return null;
+          this.regions[best].allocs++; this.regAlloc(best, bytes); this.stats.cross++;
+          return { off, len: bytes, arena: 'dram', exec: false, region: best, cross: true };
+        }
+      }
+      _capsAllowIramFb(caps) {
+        if (!this.iramOn) return false;
+        if (caps & CAP_EXEC) return false;
+        if (caps & (CAP_DMA | CAP_8 | CAP_SPIRAM)) return false;
+        return (caps & CAP_32) || caps === 0;
+      }
+      malloc(size, caps) {
+        if (!this.ok) return null;
+        if (size === 0) size = 1; size = al4(size);
+        if (caps & CAP_EXEC) {
+          if ((caps & ~(CAP_EXEC | CAP_32 | CAP_INT)) !== 0) {
+            this.stats.failMem++; return null;
+          }
+          if (!this.iramOn) { this.stats.failMem++; return null; }
+          const off = this.iFreeStart(size);
+          if (off < 0) { this.stats.failMem++; return null; }
+          if (!this.iInsert(off, size, true)) return null;
+          this.iAlloc(size); this.stats.exec++; this.stats.active++;
+          if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
+          const id = ++this.idc;
+          this.map.set(id, { off, len: size, arena: 'iram', exec: true, region: -1, cross: false });
+          this._idxAdd(id, 'iram', off);
+          return id;
+        }
+        if (this._capsAllowIramFb(caps) && this.iCanFb(size)) {
+          const off = this.iFreeEnd(size);
+          if (off >= 0 && this.iInsert(off, size, false)) {
+            this.iAlloc(size); this.stats.fb++; this.stats.active++;
+            if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
+            const id = ++this.idc;
+            this.map.set(id, { off, len: size, arena: 'iram', exec: false, region: -1, cross: false });
+            this._idxAdd(id, 'iram', off);
+            return id;
+          }
+        }
+        const ri = this.regForSize(size, caps);
+        if (ri >= 0) {
+          const off = this.findFree(ri, size);
+          if (off >= 0) {
+            if (!this.dInsert(off, size)) return null;
+            this.regions[ri].allocs++; this.regAlloc(ri, size);
+            this.stats.active++;
+            if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
+            const id = ++this.idc;
+            this.map.set(id, { off, len: size, arena: 'dram', exec: false, region: ri, cross: false });
+            this._idxAdd(id, 'dram', off);
+            return id;
+          }
+        }
+        if (this.cross) {
+          const r = this.tryCross(size, caps, ri);
+          if (r) {
+            this.stats.active++;
+            if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
+            const id = ++this.idc; this.map.set(id, r);
+            this._idxAdd(id, 'dram', r.off); return id;
+          }
+        }
+        this.stats.failMem++; return null;
+      }
+      free(id) {
+        if (!this.map.has(id)) { this.stats.badFree++; return false; }
+        const a = this.map.get(id); this.map.delete(id); this.stats.active--;
+        this._idxDel(a.arena, a.off);
+        if (a.arena === 'dram') {
+          const idx = this.dFind(a.off);
+          if (idx < 0) { this.stats.badFree++; return false; }
+          const len = this.dDesc[idx].len;
+          const ri = this.regByOff(a.off);
+          this.dDesc.splice(idx, 1);
+          if (ri >= 0 && this.regions[ri].allocs > 0) this.regions[ri].allocs--;
+          this.regRelease(ri, len);
+        } else {
+          const idx = this.iFind(a.off);
+          if (idx < 0) { this.stats.badFree++; return false; }
+          const len = this.iDesc[idx].len;
+          this.iDesc.splice(idx, 1); this.iRelease(len);
+        }
+        return true;
+      }
+      realloc(id, newSize, caps) {
+        if (!this.map.has(id)) return null;
+        if (newSize === 0) { this.free(id); return -1; }
+        newSize = al4(newSize);
+        const a = this.map.get(id);
+        if (a.arena === 'dram') {
+          const idx = this.dFind(a.off);
+          if (idx < 0) return null;
+          const oldLen = this.dDesc[idx].len;
+          const ri = this.regByOff(a.off);
+          const capsOk = (this.regions[ri].caps & caps) === caps;
+          const sizeOk = newSize >= this.regions[ri].min && (this.regions[ri].max === 0 || newSize <= this.regions[ri].max);
+          if (capsOk && sizeOk) {
+            if (newSize === oldLen) return id;
+            if (newSize < oldLen) {
+              const diff = oldLen - newSize;
+              this.dDesc[idx].len = newSize;
+              a.len = newSize;
+              this.regRelease(ri, diff);
+              return id;
+            }
+            const extra = newSize - oldLen;
+            const blockEnd = a.off + oldLen;
+            const regionEnd = this.regions[ri].start + this.regions[ri].total;
+            let nextB = regionEnd;
+            if (idx + 1 < this.dDesc.length) {
+              const no = this.dDesc[idx + 1].off;
+              if (no < regionEnd) nextB = no;
+            }
+            if (nextB >= blockEnd && (nextB - blockEnd) >= extra) {
+              this.dDesc[idx].len = newSize;
+              a.len = newSize;
+              this.regAlloc(ri, extra);
+              return id;
+            }
+          }
+          const newId = this.malloc(newSize, caps);
+          if (newId === null) return null;
+          this.free(id);
+          return newId;
+        }
+        if (a.arena === 'iram') {
+          const idx = this.iFind(a.off);
+          if (idx < 0) return null;
+          const oldLen = this.iDesc[idx].len;
+          const oldExec = this.iDesc[idx].exec;
+          let wantExec = (caps & CAP_EXEC) !== 0;
+          if (oldExec) wantExec = true;
+          const inplaceOk = wantExec
+            ? (oldExec && ((caps & ~(CAP_EXEC | CAP_32 | CAP_INT)) === 0))
+            : (!oldExec && this._capsAllowIramFb(caps));
+          if (inplaceOk) {
+            if (newSize === oldLen) return id;
+            if (newSize < oldLen) {
+              const diff = oldLen - newSize;
+              this.iDesc[idx].len = newSize; a.len = newSize;
+              this.iRelease(diff); return id;
+            }
+            const extra = newSize - oldLen;
+            if (!oldExec && !this.iCanGrowFb(oldLen, newSize)) {
+              // Cannot grow in place, fall through to move
+            } else {
+              const blockEnd = a.off + oldLen;
+              let nextB = this.iramTotal;
+              if (idx + 1 < this.iDesc.length) nextB = this.iDesc[idx + 1].off;
+              if (nextB >= blockEnd && (nextB - blockEnd) >= extra) {
+                this.iDesc[idx].len = newSize; a.len = newSize;
+                this.iAlloc(extra); return id;
               }
             }
           }
+          const newId = this.malloc(newSize, caps | (oldExec ? CAP_EXEC : 0));
+          if (newId === null) return null;
+          this.free(id);
+          return newId;
         }
-        if (!placed) { const p = $('#simPanel'); p.classList.add('fail'); setTimeout(() => p.classList.remove('fail'), 350); return }
-        placed.id = ++SIM.seq; SIM.blocks.set(placed.id, placed); renderB(placed, true);
+        return null;
       }
-      function simStats() {
-        $('#stDram').textContent = (SIM.dram - used('dram')).toLocaleString('en') + ' B';
-        $('#stIram').textContent = (SIM.iram - used('iram')).toLocaleString('en') + ' B';
-        $('#stAct').textContent = SIM.blocks.size;
-        $('#stFb').textContent = SIM.fb;
-        $('#stCross').textContent = SIM.cross;
-      }
-      for (let i = 0; i < 12; i++)simAlloc();
-      simStats();
-      (function tick() { simAlloc(); simStats(); setTimeout(tick, 430 + Math.random() * 520) })();
-      /* ================= policy tester ================= */
-      const CAP = { EXEC: 1, S32: 2, S8: 4, DMA: 8, SPIRAM: 1024, INTERNAL: 2048 };
-      let caps = CAP.S32;
-      const sizeIn = $('#ptSize');
-      function syncChips() { $$('#ptCaps .capbtn').forEach(b => b.classList.toggle('on', !!(caps & CAP[b.dataset.cap]))) }
-      $$('#ptCaps .capbtn').forEach(b => b.addEventListener('click', () => { caps ^= CAP[b.dataset.cap]; syncChips(); decide() }));
-      sizeIn.addEventListener('input', () => { $('#ptSizeV').textContent = sizeIn.value + ' B'; decide() });
-      const PRESETS = { malloc: { c: CAP.S32, s: 480 }, dma: { c: CAP.DMA | CAP.S32 | CAP.S8, s: 1400 }, exec: { c: CAP.EXEC | CAP.S32, s: 320 }, wifi: { c: CAP.INTERNAL | CAP.S32, s: 2048 }, spiram: { c: CAP.SPIRAM | CAP.S32, s: 512 } };
-      $$('.pre').forEach(p => p.addEventListener('click', () => { const pr = PRESETS[p.dataset.p]; caps = pr.c; sizeIn.value = pr.s; $('#ptSizeV').textContent = pr.s + ' B'; syncChips(); decide() }));
-      $('#ptGo').addEventListener('click', decide);
-      function decide() {
-        const size = +sizeIn.value;
-        let c = caps; if (c === 0) c = CAP.S32;
-        const hit = i => { const el = $('#lane' + i); if (el) el.classList.add('hit') };
-        const arm = i => { const el = $('#lane' + i); if (el) el.classList.add('armed') };
-        [0, 1, 2, 3].forEach(i => { const el = $('#lane' + i); if (el) el.classList.remove('hit', 'armed') });
-        let v, cls, why, badge;
-        const ri = size <= 128 ? 0 : size <= 1024 ? 1 : 2;
-        const ranges = ['4–132 B', '132–1024 B', '1024 B – ∞'];
-        if (c & CAP.SPIRAM) {
-          hit(3); v = 'NULL'; cls = 'v-null';
-          why = 'MALLOC_CAP_SPIRAM — ESP8266 has no SPIRAM; request rejected';
-          badge = 'REJECTED';
-        } else if (c & CAP.EXEC) {
-          if (c & (CAP.DMA | CAP.S8)) { hit(3); v = 'NULL'; cls = 'v-null'; why = 'EXEC cannot be combined with DMA or 8BIT — no such memory exists'; badge = 'REJECTED'; }
-          else { hit(0); v = 'IRAM · EXEC'; cls = 'v-iram'; why = 'executable memory lives only in IRAM · allocated from IRAM start · ignores reserve'; badge = 'EXEC · IRAM ONLY'; }
-        } else if (c & (CAP.DMA | CAP.S8)) {
-          hit(1); v = 'DRAM · REGION ' + ri; cls = 'v-dram';
-          $('#lane1s').textContent = 'region ' + ri + ' · ' + ranges[ri];
-          why = 'size ' + size + ' B · size class ' + ranges[ri] + ' · DMA/8BIT memory never goes to IRAM';
-          badge = 'DRAM ONLY';
-        } else {
-          hit(0); v = 'IRAM · 32BIT'; cls = 'v-iram';
-          arm(1); arm(2);
-          $('#lane1s').textContent = 'region ' + ri + ' · ' + ranges[ri] + ' (fallback)';
-          why = 'size ' + size + ' B · MALLOC_CAP_32BIT → IRAM first (from end, respect reserve) → DRAM region Ri → cross-region (opt-in)';
-          badge = 'FALLBACK: DRAM → CROSS-REGION';
+      getStatus() {
+        let t = 0, f = 0, l = 0;
+        for (let i = 0; i < this.regions.length; i++) {
+          t += this.regions[i].total; f += this.regions[i].free;
+          const lr = this.regLargest(i); if (lr > l) l = lr;
         }
-        const vd = $('#ptVerdict'); vd.textContent = v; vd.className = 'verdict ' + cls;
-        $('#ptWhy').textContent = why; $('#ptBadge').textContent = badge;
-      }
-      decide();
-      /* ================= descriptor lab ================= */
-      function buildWord(el, idx) {
-        for (let i = 0; i < 32; i++) {
-          const d = document.createElement('div'); d.className = 'bit' + (i === 0 ? ' flag' : ''); el.appendChild(d);
-          const s = document.createElement('span'); s.textContent = 31 - i; idx.appendChild(s);
+        if (this.iramOn) {
+          t += this.iramTotal; f += this.iramFree;
+          const il = this.iLargest(); if (il > l) l = il;
         }
+        return {
+          total: t, free: f, minFree: this.stats.minFree, largest: l,
+          active: this.stats.active, maxActive: this.stats.maxActive,
+          exec: this.stats.exec, fb: this.stats.fb, cross: this.stats.cross,
+          failMem: this.stats.failMem, failTbl: this.stats.failTbl, badFree: this.stats.badFree
+        };
       }
-      buildWord($('#wOff'), $('#iOff')); buildWord($('#wLen'), $('#iLen'));
-      let iramOn = false, execOn = false;
-      [['#iramT', v => iramOn = v], ['#execT', v => execOn = v]].forEach(([id, fn]) => {
-        $(id).addEventListener('click', e => { fn(!e.target.classList.contains('on')); e.target.classList.toggle('on'); updDesc() });
-      });
-      function drawWord(el, v) { v = v >>> 0; [...el.children].forEach((c, i) => { const b = (v >>> (31 - i)) & 1; c.textContent = b; c.classList.toggle('on', !!b) }) }
-      function updDesc() {
-        const off = +$('#offR').value, len = +$('#lenR').value;
-        const of = (off | (iramOn ? 0x80000000 : 0)) >>> 0, lf = (len | (execOn ? 0x80000000 : 0)) >>> 0;
-        drawWord($('#wOff'), of); drawWord($('#wLen'), lf);
-        $('#rOffV').textContent = off; $('#rLenV').textContent = len;
-        $('#rKey').textContent = '0x' + of.toString(16).toUpperCase().padStart(8, '0');
-        $('#rLen').textContent = len.toString(2).padStart(31, '0');
-        const base = iramOn ? 0x4010A000 : 0x3FFE8000;
-        $('#rPtr').textContent = '0x' + (base + off).toString(16).toUpperCase();
-      }
-      $('#offR').addEventListener('input', updDesc); $('#lenR').addEventListener('input', updDesc);
-      updDesc();
-      /* ================= region calculator ================= */
-      const CPAL = ['#f4c67f', '#e2a45c', '#b97f3e', '#7fe6b6', '#79b8d8', '#ef8f72'];
-      function calc() {
-        const parse = v => v.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-        const b = parse($('#inB').value), p = parse($('#inP').value);
-        const arenaB = Math.round((+$('#inA').value || 64) * 1024);
-        const out = $('#calcOut'), bar = $('#calcBar');
-        const fail = m => { out.innerHTML = '<div class="cerr">✗ ' + m + '</div>'; bar.innerHTML = ''; $('#calcTotal').textContent = '' };
-        if (b.length < 2 || b.length > 16) return fail('need 2–16 boundaries');
-        if (p.length !== b.length) return fail('percent count (' + p.length + ') ≠ boundary count (' + b.length + ')');
-        if (p.some(x => x < 0 || x > 100) || p.reduce((a, c) => a + c, 0) > 100) return fail('percents must be 0–100 with sum ≤ 100');
-        const u = b.map(x => Math.max(1, Math.min(x, 2147483647)));
-        for (let i = 1; i < u.length; i++)if (u[i] <= u[i - 1]) return fail('boundaries must be strictly increasing');
-        let rem = arenaB; const rows = [];
-        for (let i = 0; i < u.length; i++) {
-          let bytes = (arenaB * p[i] / 100) | 0;
-          if (i === u.length - 1 && p[i] === 0) bytes = rem;
-          if (bytes < u[i]) bytes = u[i];
-          if (bytes > rem) return fail('region ' + i + ' needs ' + bytes + ' bytes, only ' + rem + ' left — shrink percents or enlarge arena');
-          rem -= bytes; rows.push({ min: u[i], max: i < u.length - 1 ? u[i + 1] - 1 : 0, bytes });
+      regLargest(ri) {
+        if (ri >= this.regions.length) return 0;
+        const rs = this.regions[ri].start, re = rs + this.regions[ri].total;
+        let cur = rs, lg = 0;
+        for (const d of this.dDesc) {
+          if (d.off + d.len <= rs) continue; if (d.off >= re) break;
+          if (d.off > cur && d.off - cur > lg) lg = d.off - cur;
+          if (d.off + d.len > cur) cur = d.off + d.len; if (cur >= re) break;
         }
-        if (rem > 0) rows[rows.length - 1].bytes += rem;
-        bar.innerHTML = rows.map((r, i) => '<div class="cseg" style="width:' + (r.bytes / arenaB * 100) + '%;background:' + CPAL[i % CPAL.length] + '">R' + i + '</div>').join('');
-        $('#calcTotal').textContent = arenaB.toLocaleString('en') + ' B';
-        out.innerHTML = '<div class="tblwrap"><table><thead><tr><th>#</th><th>Accepts blocks</th><th>min/max bytes</th><th>Memory</th></tr></thead><tbody>' +
-          rows.map((r, i) => '<tr><td>R' + i + '</td><td><code>' + r.min.toLocaleString('en') + ' – ' + (r.max ? r.max.toLocaleString('en') + ' B' : '∞ (unlimited)') + '</code></td>' +
-            '<td>' + r.min + ' / ' + (r.max || '∞') + '</td><td>' + r.bytes.toLocaleString('en') + ' B (' + (r.bytes / arenaB * 100).toFixed(1) + '%)</td></tr>').join('') +
-          '</tbody></table></div>';
+        if (re > cur && re - cur > lg) lg = re - cur; return lg;
       }
-      ['#inB', '#inP', '#inA'].forEach(id => $(id).addEventListener('input', calc));
-      calc();
-      /* ================= scan race ================= */
-      const scD = $('#scD');
-      const mk = (n, parent, tag) => {
-        const t = document.createElement('span'); t.className = 'tag'; t.textContent = tag; parent.appendChild(t);
-        const cells = []; for (let i = 0; i < n; i++) { const d = document.createElement('div'); d.className = 'scell'; parent.appendChild(d); cells.push(d) } return cells
+      iLargest() {
+        if (!this.iramOn) return 0;
+        let cur = 0, lg = 0;
+        for (const d of this.iDesc) {
+          if (d.off > cur && d.off - cur > lg) lg = d.off - cur;
+          if (d.off + d.len > cur) cur = d.off + d.len;
+        }
+        if (this.iramTotal > cur && this.iramTotal - cur > lg) lg = this.iramTotal - cur;
+        return lg;
+      }
+    }
+
+    let alc = new MxR(), selId = null, lastAct = { type: null, off: null, arena: null };
+    let autoRun = false, autoTmr = null, autoStep = 0, autoM = 0, autoF = 0, autoFail = 0, reTmr = null;
+
+    // UX: track previous free for pulse optimization
+    let prevFreeValue = -1;
+    // UX: requestAnimationFrame throttle for auto-mode rendering
+    let renderPending = false;
+
+    function addLog(m, t = 'info') {
+      const l = document.getElementById('log');
+      const e = document.createElement('div');
+      e.className = `log-entry ${t}`; e.textContent = m;
+      l.appendChild(e); l.scrollTop = l.scrollHeight;
+      while (l.children.length > 150) l.removeChild(l.firstChild);
+    }
+    function fb(b) { return b >= 1024 ? (b / 1024).toFixed(1) + 'K' : b + 'B'; }
+    function flash(t) {
+      const e = document.getElementById('eventFlash');
+      e.className = `event-flash ${t} active`;
+      setTimeout(() => e.classList.remove('active'), 180);
+    }
+    function scheduleReinit() {
+      if (autoRun) return;
+      if (reTmr) clearTimeout(reTmr);
+      reTmr = setTimeout(() => initAlloc(true), 600);
+    }
+    function setLocked(v) {
+      ['regionConfig', 'dramSize', 'maxDesc', 'useIram', 'iramSize', 'iramReserve', 'iramFallbackMax', 'maxIramDesc', 'crossRegion']
+        .forEach(id => { const e = document.getElementById(id); if (e) e.disabled = v; });
+    }
+    function initAlloc(silent = false) {
+      stopAuto();
+      const c = {
+        regionConfig: document.getElementById('regionConfig').value,
+        dramSize: +document.getElementById('dramSize').value || 81920,
+        maxDesc: +document.getElementById('maxDesc').value || 256,
+        useIram: document.getElementById('useIram').checked,
+        iramSize: +document.getElementById('iramSize').value || 7472,
+        iramReserve: +document.getElementById('iramReserve').value || 2048,
+        iramFallbackMax: +document.getElementById('iramFallbackMax').value || 0,
+        maxIramDesc: +document.getElementById('maxIramDesc').value || 128,
+        crossRegion: document.getElementById('crossRegion').checked
       };
-      const dCells = mk(14, scD, 'descriptor');
-      let di = 0; const DT = 9;
-      setInterval(() => {
-        dCells.forEach(c => c.classList.remove('cur', 'hit', 'dim'));
-        if (di > DT) { dCells[DT].classList.add('hit'); $('#dOps').innerHTML = 'gap found @ descriptor ' + DT + ' — <b>' + (DT + 1) + ' compares</b>'; di = 0 }
+      alc = new MxR(); selId = null; lastAct = { type: null, off: null, arena: null };
+      prevFreeValue = -1;
+      if (alc.init(c)) {
+        if (!silent) addLog('✅ Allocator initialized', 'success');
         else {
-          for (let k = 0; k < di; k++)dCells[k].classList.add('dim'); dCells[di].classList.add('cur');
-          $('#dOps').innerHTML = 'descriptor compares: <b>' + (di + 1) + '</b>'; di++
+          addLog('⚙️ Settings applied', 'info');
+          const b = document.getElementById('reinitBadge');
+          b.classList.add('visible'); setTimeout(() => b.classList.remove('visible'), 1500);
         }
-      }, 380);
-    })();
+      } else addLog('❌ Init failed', 'error');
+      render();
+    }
+
+    function updateFreeBtn() {
+      document.getElementById('btnFree').disabled = selId === null;
+    }
+
+    function doMalloc() {
+      const size = +document.getElementById('allocSize').value || 64;
+      const caps = +document.getElementById('allocCaps').value;
+      const id = alc.malloc(size, caps);
+      if (id !== null) {
+        const a = alc.map.get(id);
+        lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc');
+        addLog(`✅ malloc(${size},0x${caps.toString(16)}) → id=${id},${a.arena},off=${a.off}`, 'success');
+      } else addLog(`❌ malloc(${size}) FAILED`, 'error');
+      render();
+    }
+    function doFree() {
+      if (selId === null) { addLog('⚠️ Select a block first', 'info'); return; }
+      if (!alc.map.has(selId)) {
+        addLog(`⚠️ id=${selId} already freed, deselecting`, 'info');
+        selId = null; updateFreeBtn(); render(); return;
+      }
+      const a = alc.map.get(selId);
+      if (alc.free(selId)) {
+        lastAct = { type: 'free', off: a.off, arena: a.arena }; flash('free');
+        addLog(`🗑️ free(id=${selId}) → ${a.len}B`, 'success');
+      } else addLog(`❌ free(id=${selId}) FAILED`, 'error');
+      selId = null; updateFreeBtn(); render();
+    }
+    function doFreeAll() {
+      const ids = [...alc.map.keys()]; let c = 0;
+      for (const id of ids) if (alc.free(id)) c++;
+      addLog(`🧹 Freed ${c} blocks`, 'info'); selId = null; updateFreeBtn(); render();
+    }
+    function doRandomAlloc() {
+      const sizes = [4, 8, 16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048, 4096];
+      const size = sizes[Math.floor(Math.random() * sizes.length)];
+      const caps = [2, 2, 2, 6, 14, 1][Math.floor(Math.random() * 6)];
+      document.getElementById('allocSize').value = size;
+      document.getElementById('allocCaps').value = caps;
+      const id = alc.malloc(size, caps);
+      if (id !== null) {
+        const a = alc.map.get(id);
+        lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc');
+        addLog(`🎲 malloc(${size}) → id=${id},${a.arena}`, 'success');
+      } else addLog(`🎲 malloc(${size}) FAILED`, 'error');
+      render();
+    }
+    function doStress(mn, mx, c) {
+      let ok = 0, fail = 0;
+      for (let i = 0; i < c; i++) {
+        const s = al4(mn + Math.floor(Math.random() * (mx - mn)));
+        const id = alc.malloc(s, CAP_32);
+        if (id !== null) {
+          const a = alc.map.get(id);
+          lastAct = { type: 'malloc', off: a.off, arena: a.arena }; ok++;
+        }
+        else fail++;
+      }
+      flash('malloc'); addLog(`📦 Stress: ${ok} ok, ${fail} fail (${mn}-${mx})`, 'info'); render();
+    }
+    function doStressExec() {
+      if (!alc.iramOn) { addLog('⚠️ IRAM disabled', 'error'); return; }
+      let ok = 0, fail = 0;
+      for (let i = 0; i < 5; i++) {
+        const s = al4(16 + Math.floor(Math.random() * 128));
+        const id = alc.malloc(s, CAP_EXEC);
+        if (id !== null) {
+          const a = alc.map.get(id);
+          lastAct = { type: 'malloc', off: a.off, arena: a.arena }; ok++;
+        }
+        else fail++;
+      }
+      flash('malloc'); addLog(`⚡ EXEC stress: ${ok} ok, ${fail} fail`, 'info'); render();
+    }
+    function doRealloc() {
+      if (selId === null) { addLog('⚠️ Select a block first', 'info'); return; }
+      if (!alc.map.has(selId)) { addLog('⚠️ stale selection', 'info'); selId = null; updateFreeBtn(); render(); return; }
+      const newSize = +document.getElementById('allocSize').value || 64;
+      const caps = +document.getElementById('allocCaps').value;
+      const old = alc.map.get(selId);
+      const newId = alc.realloc(selId, newSize, caps);
+      if (newId === null) { addLog(`❌ realloc(${newSize}) FAILED`, 'error'); }
+      else if (newId === -1) { addLog(`🗑️ realloc(0) → freed id=${selId}`, 'success'); selId = null; }
+      else if (newId === selId) { addLog(`✅ realloc(${newSize}) → in-place id=${selId}`, 'success'); }
+      else {
+        addLog(`✅ realloc(${newSize}) → moved ${selId}→${newId} (was ${old.arena} off=${old.off})`, 'success');
+        selId = newId; lastAct = { type: 'malloc', off: alc.map.get(newId).off, arena: alc.map.get(newId).arena }; flash('malloc');
+      }
+      updateFreeBtn(); render();
+    }
+
+    function toggleAuto() { if (autoRun) pauseAuto(); else startAuto(); }
+    function startAuto() {
+      if (!alc.ok) initAlloc();
+      autoRun = true;
+      const b = document.getElementById('btnPlay');
+      b.textContent = '⏸ Pause'; b.classList.add('active');
+      document.getElementById('liveBadge').style.display = 'inline-block';
+      setLocked(true);
+      const sp = Math.max(50, +document.getElementById('autoSpeed').value || 1000);
+      autoTmr = setInterval(autoStepFn, sp);
+      addLog(`🤖 Auto started (${sp}ms)`, 'auto');
+    }
+    function pauseAuto() {
+      autoRun = false;
+      const b = document.getElementById('btnPlay');
+      b.textContent = '▶ Start'; b.classList.remove('active');
+      document.getElementById('liveBadge').style.display = 'none';
+      if (autoTmr) { clearInterval(autoTmr); autoTmr = null; }
+      setLocked(false); addLog('⏸ Auto paused', 'auto');
+    }
+    function stopAuto() {
+      pauseAuto(); autoStep = 0; autoM = 0; autoF = 0; autoFail = 0;
+      updateAutoStatus();
+      document.getElementById('autoProgress').style.width = '0%';
+    }
+    function onSpeedChange() {
+      if (autoRun && autoTmr) {
+        clearInterval(autoTmr);
+        const sp = Math.max(50, +document.getElementById('autoSpeed').value || 1000);
+        autoTmr = setInterval(autoStepFn, sp);
+        addLog(`🤖 Speed → ${sp}ms`, 'auto');
+      }
+    }
+    function autoStepFn() {
+      autoStep++;
+      const sc = document.getElementById('autoScenario').value;
+      const mb = Math.max(1, +document.getElementById('autoMaxBlocks').value || 120);
+      const fp = Math.max(0, Math.min(100, +document.getElementById('autoFreePercent').value || 30));
+      const ac = alc.map.size;
+      let doFr = false;
+      if (ac > 0) { if (ac >= mb) doFr = true; else doFr = Math.random() * 100 < fp; }
+      if (doFr) {
+        const ids = [...alc.map.keys()];
+        const id = ids[Math.floor(Math.random() * ids.length)];
+        const a = alc.map.get(id);
+        if (alc.free(id)) {
+          lastAct = { type: 'free', off: a.off, arena: a.arena };
+          flash('free'); autoF++;
+          addLog(`🤖 free(id=${id}) → ${a.arena},${a.len}B`, 'auto');
+        }
+      } else {
+        let size, caps;
+        switch (sc) {
+          case 'random': size = al4(4 + Math.floor(Math.random() * 4096));
+            caps = [2, 2, 2, 6, 14, 0][Math.floor(Math.random() * 6)]; break;
+          case 'wifi': {
+            const r = Math.random();
+            if (r < 0.6) { size = al4(32 + Math.floor(Math.random() * 96)); caps = 14; }
+            else if (r < 0.88) { size = al4(128 + Math.floor(Math.random() * 512)); caps = 6; }
+            else { size = al4(1500 + Math.floor(Math.random() * 1500)); caps = 2; }
+            break;
+          }
+          case 'stress': size = al4(4 + Math.floor(Math.random() * 8192)); caps = 2; break;
+          case 'fragment':
+            if (autoStep % 2 === 0) { size = al4(4 + Math.floor(Math.random() * 32)); caps = 14; }
+            else { size = al4(256 + Math.floor(Math.random() * 2048)); caps = 2; } break;
+          case 'exec': size = al4(16 + Math.floor(Math.random() * 256)); caps = CAP_EXEC; break;
+          case 'mixed': {
+            const r = Math.random();
+            if (r < 0.15) { size = al4(16 + Math.floor(Math.random() * 128)); caps = CAP_EXEC; }
+            else if (r < 0.5) { size = al4(4 + Math.floor(Math.random() * 64)); caps = 14; }
+            else if (r < 0.8) { size = al4(64 + Math.floor(Math.random() * 512)); caps = 2; }
+            else { size = al4(512 + Math.floor(Math.random() * 4096)); caps = 6; } break;
+          }
+          default: size = al4(4 + Math.floor(Math.random() * 4096)); caps = 2;
+        }
+        const id = alc.malloc(size, caps);
+        if (id !== null) {
+          const a = alc.map.get(id);
+          lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc'); autoM++;
+          addLog(`🤖 malloc(${size},${caps === 1 ? 'EXEC' : '0x' + caps.toString(16)}) → id=${id},${a.arena}`, 'auto');
+        } else {
+          autoFail++;
+          addLog(`🤖 malloc(${size}) FAILED`, 'error');
+        }
+      }
+      updateAutoStatus();
+      // UX: throttle render to animation frame in auto-mode
+      scheduleRender();
+    }
+    function scheduleRender() {
+      if (renderPending) return;
+      renderPending = true;
+      requestAnimationFrame(() => {
+        render();
+        renderPending = false;
+      });
+    }
+    function updateAutoStatus() {
+      document.getElementById('autoStepCount').textContent = `Step: ${autoStep}`;
+      document.getElementById('autoAllocCount').textContent = `M:${autoM} F:${autoF} Err:${autoFail}`;
+      const mb = Math.max(1, +document.getElementById('autoMaxBlocks').value || 120);
+      document.getElementById('autoProgress').style.width =
+        Math.min(100, (alc.map.size / mb) * 100) + '%';
+    }
+
+    function render() { renderStats(); renderMemory(); renderDescTable(); renderRegionTable(); updateFreeBtn(); }
+
+    function renderStats() {
+      const st = alc.getStatus();
+      document.getElementById('stTotal').textContent = fb(st.total);
+      document.getElementById('stFree').textContent = fb(st.free);
+      document.getElementById('stMinFree').textContent = fb(st.minFree);
+      document.getElementById('stLargest').textContent = fb(st.largest);
+      document.getElementById('stActive').textContent = st.active;
+
+      // UX: Failed = failMem + failTbl + badFree, with tooltip breakdown
+      const totalFailed = st.failMem + st.failTbl + st.badFree;
+      document.getElementById('stFailed').textContent = totalFailed;
+      document.getElementById('stFailedCard').title =
+        `No memory: ${st.failMem}\nTable full: ${st.failTbl}\nBad free: ${st.badFree}\n\nAlloc types:\n  EXEC: ${st.exec}\n  IRAM FB: ${st.fb}\n  Cross-region: ${st.cross}`;
+
+      // UX: pulse only when free value actually changes
+      const fc = document.getElementById('stFreeCard');
+      if (st.free !== prevFreeValue) {
+        fc.classList.remove('pulse'); void fc.offsetWidth; fc.classList.add('pulse');
+        prevFreeValue = st.free;
+      }
+    }
+
+    function blockColor(seg) {
+      if (seg.type === 'free') return null;
+      if (seg.type === 'exec') return `linear-gradient(180deg,${EXEC_COLOR},${EXEC_COLOR_D})`;
+      if (seg.type === 'fallback') return `linear-gradient(180deg,${FALLBACK_COLOR},${FALLBACK_COLOR_D})`;
+      if (seg.type === 'cross') return `linear-gradient(180deg,${CROSS_COLOR},${CROSS_COLOR_D})`;
+      const ri = seg.regionIdx;
+      const total = alc.regions.length;
+      if (ri < 0 || ri >= total) return `linear-gradient(180deg,#94a3b8,#64748b)`;
+      return `linear-gradient(180deg,${regionColor(ri, total)},${regionColorDark(ri, total)})`;
+    }
+
+    function renderMemory() {
+      const dBar = document.getElementById('dramBar');
+      const dMark = document.getElementById('dramMarkers');
+      dBar.innerHTML = ''; dMark.innerHTML = '';
+      const dTotal = alc.dramTotal;
+      if (dTotal === 0) return;
+      const segs = [];
+      for (const d of alc.dDesc) {
+        const id = alc._idxGet('dram', d.off);
+        const alloc = id != null ? alc.map.get(id) : null;
+        const ri = alc.regByOff(d.off);
+        const tp = alloc && alloc.cross ? 'cross' : 'region';
+        segs.push({
+          start: d.off, end: d.off + d.len, type: tp,
+          id: id, len: d.len, regionIdx: ri
+        });
+      }
+      let cur = 0; const all = [];
+      for (const s of segs) {
+        if (s.start > cur) all.push({ start: cur, end: s.start, type: 'free', len: s.start - cur });
+        all.push(s); cur = s.end;
+      }
+      if (cur < dTotal) all.push({ start: cur, end: dTotal, type: 'free', len: dTotal - cur });
+      for (const s of all) {
+        const div = document.createElement('div');
+        div.className = 'mem-blk' + (s.type === 'free' ? ' free' : '');
+        div.style.width = Math.max(0.3, (s.len / dTotal) * 100) + '%';
+        const bg = blockColor(s);
+        if (bg) div.style.background = bg;
+        if (s.type !== 'free' && s.len / dTotal > 0.04) div.textContent = s.len;
+        if (s.id != null) {
+          div.onclick = () => { selId = s.id; render(); };
+          if (s.id === selId) div.classList.add('selected');
+        }
+        if (lastAct.type === 'malloc' && s.start === lastAct.off && s.type !== 'free' && lastAct.arena === 'dram')
+          div.classList.add('appear', 'flash');
+        div.onmouseenter = e => showTip(e, s);
+        div.onmouseleave = hideTip;
+        dBar.appendChild(div);
+      }
+      const rc = alc.regions.length;
+      for (let i = 0; i < rc; i++) {
+        const r = alc.regions[i];
+        const div = document.createElement('div');
+        div.className = 'region-marker';
+        div.style.width = (r.total / dTotal) * 100 + '%';
+        div.style.background = regionColor(i, rc);
+        dMark.appendChild(div);
+      }
+      const dFree = alc.regions.reduce((s, r) => s + r.free, 0);
+      document.getElementById('dramInfo').textContent =
+        `total:${fb(dTotal)} free:${fb(dFree)} desc:${alc.dDesc.length}/${alc.maxDesc}`;
+      const iSec = document.getElementById('iramSec');
+      if (!alc.iramOn) { iSec.style.display = 'none'; } else {
+        iSec.style.display = 'block';
+        const iBar = document.getElementById('iramBar'); iBar.innerHTML = '';
+        const iTotal = alc.iramTotal;
+        const iSegs = [];
+        for (const d of alc.iDesc) {
+          const id = alc._idxGet('iram', d.off);
+          iSegs.push({
+            start: d.off, end: d.off + d.len,
+            type: d.exec ? 'exec' : 'fallback', id: id, len: d.len, exec: d.exec
+          });
+        }
+        let ic = 0; const iAll = [];
+        for (const s of iSegs) {
+          if (s.start > ic) iAll.push({ start: ic, end: s.start, type: 'free', len: s.start - ic });
+          iAll.push(s); ic = s.end;
+        }
+        if (ic < iTotal) iAll.push({ start: ic, end: iTotal, type: 'free', len: iTotal - ic });
+        for (const s of iAll) {
+          const div = document.createElement('div');
+          div.className = 'mem-blk' + (s.type === 'free' ? ' free' : '');
+          div.style.width = Math.max(0.3, (s.len / iTotal) * 100) + '%';
+          const bg = blockColor(s); if (bg) div.style.background = bg;
+          if (s.type !== 'free' && s.len / iTotal > 0.04) div.textContent = s.len;
+          if (s.id != null) {
+            div.onclick = () => { selId = s.id; render(); };
+            if (s.id === selId) div.classList.add('selected');
+          }
+          if (lastAct.type === 'malloc' && s.start === lastAct.off && s.type !== 'free' && lastAct.arena === 'iram')
+            div.classList.add('appear', 'flash');
+          div.onmouseenter = e => showTip(e, s);
+          div.onmouseleave = hideTip;
+          iBar.appendChild(div);
+        }
+        document.getElementById('iramInfo').textContent =
+          `total:${fb(iTotal)} free:${fb(alc.iramFree)} res:${fb(alc.iramRes)} fbMax:${alc.iramFbMax || '∞'} desc:${alc.iDesc.length}/${alc.maxIDesc}`;
+      }
+      const leg = document.getElementById('legend');
+      leg.innerHTML = '';
+      const rc2 = alc.regions.length;
+      for (let i = 0; i < rc2; i++) {
+        const r = alc.regions[i];
+        const maxStr = r.max === 0 ? '∞' : r.max;
+        leg.innerHTML += `<div class="legend-item">
+      <div class="legend-dot" style="background:${regionColor(i, rc2)}"></div>
+      R${i} (${r.min}–${maxStr})</div>`;
+      }
+      if (alc.iramOn) {
+        leg.innerHTML += `<div class="legend-item">
+      <div class="legend-dot" style="background:${EXEC_COLOR}"></div>EXEC</div>`;
+        leg.innerHTML += `<div class="legend-item">
+      <div class="legend-dot" style="background:${FALLBACK_COLOR}"></div>Fallback</div>`;
+      }
+      if (alc.cross) {
+        leg.innerHTML += `<div class="legend-item">
+      <div class="legend-dot" style="background:${CROSS_COLOR}"></div>Cross</div>`;
+      }
+    }
+
+    function renderDescTable() {
+      const tb = document.getElementById('descTable'); tb.innerHTML = '';
+      let idx = 0;
+      const rc = alc.regions.length;
+      for (const d of alc.dDesc) {
+        const id = alc._idxGet('dram', d.off);
+        const a = id != null ? alc.map.get(id) : null;
+        const ri = alc.regByOff(d.off);
+        const tr = document.createElement('tr');
+        if (lastAct.type === 'malloc' && d.off === lastAct.off && lastAct.arena === 'dram')
+          tr.classList.add('new-row');
+        const riLabel = ri < 0 ? '?' : `R${ri}`;
+        const riColor = ri < 0 ? '#94a3b8' : regionColor(ri, rc);
+        tr.innerHTML = `<td>${idx++}</td><td style="color:#4f6ef7;font-weight:700">DRAM</td>
+      <td>${d.off}</td><td>${d.len}</td><td>—</td>
+      <td style="color:${riColor};font-weight:700">${riLabel}</td>
+      <td><button class="btn btn-r btn-sm" onclick="freeByOff(${d.off},'dram')">✕</button></td>`;
+        if (a && id === selId) tr.style.background = '#eef2ff';
+        tb.appendChild(tr);
+      }
+      for (const d of alc.iDesc) {
+        const id = alc._idxGet('iram', d.off);
+        const a = id != null ? alc.map.get(id) : null;
+        const tr = document.createElement('tr');
+        if (lastAct.type === 'malloc' && d.off === lastAct.off && lastAct.arena === 'iram')
+          tr.classList.add('new-row');
+        tr.innerHTML = `<td>${idx++}</td>
+      <td style="color:#8b5cf6;font-weight:700">IRAM</td>
+      <td>${d.off}</td><td>${d.len}</td><td>${d.exec ? '✓' : '—'}</td><td>—</td>
+      <td><button class="btn btn-r btn-sm" onclick="freeByOff(${d.off},'iram')">✕</button></td>`;
+        if (a && id === selId) tr.style.background = '#f5f3ff';
+        tb.appendChild(tr);
+      }
+    }
+    function freeByOff(off, arena) {
+      const id = alc._idxGet(arena, off);
+      if (id == null) return;
+      selId = id; doFree();
+    }
+    function renderRegionTable() {
+      const tb = document.getElementById('regionTable'); tb.innerHTML = '';
+      const rc = alc.regions.length;
+      for (let i = 0; i < rc; i++) {
+        const r = alc.regions[i];
+        const lg = alc.regLargest(i);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td style="color:${regionColor(i, rc)};font-weight:800">R${i}</td>
+      <td>${r.min}</td><td>${r.max === 0 ? '∞' : r.max}</td>
+      <td>${fb(r.total)}</td><td>${fb(r.free)}</td><td>${fb(r.minFree)}</td>
+      <td>${fb(lg)}</td><td>${r.allocs}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    function switchTab(n, el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('tab-' + n).classList.add('active');
+    }
+    function showTip(e, seg) {
+      const t = document.getElementById('tooltip');
+      let txt;
+      if (seg.type === 'free') { txt = `FREE: ${seg.len} bytes\noffset: ${seg.start}`; }
+      else if (seg.type === 'exec') { txt = `IRAM EXEC: ${seg.len} bytes\noffset: ${seg.start}`; }
+      else if (seg.type === 'fallback') { txt = `IRAM FALLBACK: ${seg.len} bytes\noffset: ${seg.start}`; }
+      else if (seg.type === 'cross') { txt = `CROSS-REGION: ${seg.len} bytes\noffset: ${seg.start}\nregion: R${seg.regionIdx >= 0 ? seg.regionIdx : '?'}`; }
+      else { txt = `REGION R${seg.regionIdx >= 0 ? seg.regionIdx : '?'}: ${seg.len} bytes\noffset: ${seg.start}`; }
+      if (seg.id != null) txt += `\nid: ${seg.id}`;
+      t.textContent = txt;
+      t.style.display = 'block';
+      const rect = t.getBoundingClientRect();
+      let x = e.clientX + 12;
+      let y = e.clientY + 12;
+      if (x + rect.width > window.innerWidth) x = e.clientX - rect.width - 12;
+      if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - 12;
+      x = Math.max(4, x);
+      y = Math.max(4, y);
+      t.style.left = x + 'px';
+      t.style.top = y + 'px';
+    }
+    function hideTip() { document.getElementById('tooltip').style.display = 'none'; }
+    window.onload = () => initAlloc();
+    window.onbeforeunload = () => { if (reTmr) clearTimeout(reTmr); if (autoTmr) clearInterval(autoTmr); };
   </script>
 </body>
 
