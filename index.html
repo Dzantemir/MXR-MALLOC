@@ -1,746 +1,127 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MxR-Malloc Simulator</title>
   <style>
-    *,
-    *::before,
-    *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #f4f6f9;
-      --card: #fff;
-      --border: #e0e4ea;
-      --text: #1e293b;
-      --muted: #64748b;
-      --accent: #4f6ef7;
-      --radius: 10px;
+      --bg: #f4f6f9; --card: #fff; --border: #e0e4ea; --text: #1e293b;
+      --muted: #64748b; --accent: #4f6ef7; --radius: 10px;
     }
-
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 16px;
-      line-height: 1.5;
-    }
-
-    .container {
-      max-width: 1460px;
-      margin: 0 auto;
-    }
-
-    h1 {
-      text-align: center;
-      font-size: 1.7rem;
-      font-weight: 800;
-      margin-bottom: 2px;
-    }
-
-    .subtitle {
-      text-align: center;
-      color: var(--muted);
-      font-size: .82rem;
-      margin-bottom: 16px;
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 290px 1fr;
-      gap: 14px;
-    }
-
-    @media(max-width:1000px) {
-      .layout {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
-    }
-
-    .card-title {
-      font-size: .72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--muted);
-      margin-bottom: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .sg {
-      margin-bottom: 9px;
-    }
-
-    .sg label {
-      display: block;
-      font-size: .68rem;
-      font-weight: 600;
-      color: var(--muted);
-      margin-bottom: 2px;
-    }
-
-    .sg input,
-    .sg select {
-      width: 100%;
-      padding: 6px 9px;
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      font-size: .76rem;
-      background: #f8f9fb;
-      color: var(--text);
-      outline: none;
-    }
-
-    .sg input:focus,
-    .sg select:focus {
-      border-color: var(--accent);
-    }
-
-    .sg input:disabled,
-    .sg select:disabled {
-      opacity: .45;
-      cursor: not-allowed;
-    }
-
-    .cbx {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 7px;
-      font-size: .74rem;
-      cursor: pointer;
-    }
-
-    .cbx input {
-      width: 14px;
-      height: 14px;
-      accent-color: var(--accent);
-    }
-
-    .cbx input:disabled+span {
-      opacity: .45;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      padding: 7px 13px;
-      border: none;
-      border-radius: 7px;
-      font-size: .74rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: .15s;
-    }
-
-    .btn:active {
-      transform: scale(.96);
-    }
-
-    .btn:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-    }
-
-    .btn-g {
-      background: #10b981;
-      color: #fff;
-    }
-
-    .btn-g:hover:not(:disabled) {
-      background: #059669;
-    }
-
-    .btn-r {
-      background: #ef4444;
-      color: #fff;
-    }
-
-    .btn-r:hover:not(:disabled) {
-      background: #dc2626;
-    }
-
-    .btn-b {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    .btn-b:hover:not(:disabled) {
-      background: #3b5de7;
-    }
-
-    .btn-p {
-      background: #8b5cf6;
-      color: #fff;
-    }
-
-    .btn-p:hover:not(:disabled) {
-      background: #7c3aed;
-    }
-
-    .btn-o {
-      background: #fff;
-      border: 1px solid var(--border);
-      color: var(--text);
-    }
-
-    .btn-o:hover:not(:disabled) {
-      background: #f1f3f7;
-    }
-
-    .btn-sm {
-      padding: 4px 9px;
-      font-size: .66rem;
-    }
-
-    .btn-group {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-bottom: 8px;
-    }
-
-    .auto-panel {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border-radius: var(--radius);
-      padding: 14px;
-      color: #fff;
-      margin-bottom: 14px;
-    }
-
-    .auto-panel .card-title {
-      color: rgba(255, 255, 255, .75);
-    }
-
-    .auto-controls {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .auto-btn {
-      flex: 1;
-      padding: 9px;
-      border: none;
-      border-radius: 7px;
-      font-size: .8rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: .2s;
-    }
-
-    .auto-btn.play {
-      background: rgba(255, 255, 255, .18);
-      color: #fff;
-    }
-
-    .auto-btn.play:hover {
-      background: rgba(255, 255, 255, .28);
-    }
-
-    .auto-btn.play.active {
-      background: #10b981;
-    }
-
-    .auto-btn.stop {
-      background: rgba(255, 255, 255, .1);
-      color: rgba(255, 255, 255, .8);
-    }
-
-    .auto-btn.stop:hover {
-      background: rgba(239, 68, 68, .7);
-      color: #fff;
-    }
-
-    .auto-settings {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 7px;
-    }
-
-    .auto-settings label {
-      font-size: .62rem;
-      color: rgba(255, 255, 255, .65);
-      display: block;
-      margin-bottom: 2px;
-    }
-
-    .auto-settings select,
-    .auto-settings input {
-      width: 100%;
-      padding: 5px 7px;
-      border: 1px solid rgba(255, 255, 255, .25);
-      border-radius: 6px;
-      background: rgba(255, 255, 255, .12);
-      color: #fff;
-      font-size: .72rem;
-      outline: none;
-    }
-
-    .auto-settings select option {
-      color: #333;
-      background: #fff;
-    }
-
-    .auto-progress {
-      height: 3px;
-      background: rgba(255, 255, 255, .2);
-      border-radius: 2px;
-      margin-top: 10px;
-      overflow: hidden;
-    }
-
-    .auto-progress-bar {
-      height: 100%;
-      background: rgba(255, 255, 255, .85);
-      border-radius: 2px;
-      transition: width .3s;
-      width: 0;
-    }
-
-    .auto-status {
-      margin-top: 7px;
-      font-size: .64rem;
-      color: rgba(255, 255, 255, .6);
-      display: flex;
-      justify-content: space-between;
-    }
-
-    .live-badge {
-      font-size: .55rem;
-      background: rgba(16, 185, 129, .8);
-      padding: 1px 6px;
-      border-radius: 8px;
-      animation: lp 2s infinite;
-    }
-
-    @keyframes lp {
-
-      0%,
-      100% {
-        opacity: 1;
-      }
-
-      50% {
-        opacity: .4;
-      }
-    }
-
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-
-    @media(max-width:800px) {
-      .stats-grid {
-        grid-template-columns: repeat(3, 1fr);
-      }
-    }
-
-    .stat-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 9px 6px;
-      text-align: center;
-      cursor: default;
-    }
-
-    .stat-card.pulse {
-      animation: sp .3s ease;
-    }
-
-    @keyframes sp {
-      50% {
-        transform: scale(1.05);
-      }
-    }
-
-    .stat-value {
-      font-size: .95rem;
-      font-weight: 800;
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .stat-label {
-      font-size: .58rem;
-      color: var(--muted);
-      margin-top: 1px;
-      text-transform: uppercase;
-    }
-
-    .mem-sec {
-      margin-bottom: 12px;
-    }
-
-    .mem-hdr {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 5px;
-    }
-
-    .mem-title {
-      font-size: .74rem;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .mem-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-
-    .mem-info {
-      font-size: .64rem;
-      color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .mem-bar {
-      display: flex;
-      height: 38px;
-      border-radius: 7px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      background: #eef1f5;
-      gap: 1px;
-    }
-
-    .mem-blk {
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 16px; line-height: 1.5; }
+    .container { max-width: 1460px; margin: 0 auto; }
+    h1 { text-align: center; font-size: 1.7rem; font-weight: 800; margin-bottom: 2px; }
+    .subtitle { text-align: center; color: var(--muted); font-size: .82rem; margin-bottom: 16px; }
+    .layout { display: grid; grid-template-columns: 290px 1fr; gap: 14px; }
+    @media(max-width:1000px) { .layout { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .card-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .sg { margin-bottom: 9px; }
+    .sg label { display: block; font-size: .68rem; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+    .sg input, .sg select { width: 100%; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: .76rem; background: #f8f9fb; color: var(--text); outline: none; }
+    .sg input:focus, .sg select:focus { border-color: var(--accent); }
+    .sg input:disabled, .sg select:disabled { opacity: .45; cursor: not-allowed; }
+    .cbx { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; font-size: .74rem; cursor: pointer; }
+    .cbx input { width: 14px; height: 14px; accent-color: var(--accent); }
+    .cbx input:disabled+span { opacity: .45; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 7px 13px; border: none; border-radius: 7px; font-size: .74rem; font-weight: 600; cursor: pointer; transition: .15s; }
+    .btn:active { transform: scale(.96); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-g { background: #10b981; color: #fff; } .btn-g:hover:not(:disabled) { background: #059669; }
+    .btn-r { background: #ef4444; color: #fff; } .btn-r:hover:not(:disabled) { background: #dc2626; }
+    .btn-b { background: var(--accent); color: #fff; } .btn-b:hover:not(:disabled) { background: #3b5de7; }
+    .btn-p { background: #8b5cf6; color: #fff; } .btn-p:hover:not(:disabled) { background: #7c3aed; }
+    .btn-o { background: #fff; border: 1px solid var(--border); color: var(--text); } .btn-o:hover:not(:disabled) { background: #f1f3f7; }
+    .btn-sm { padding: 4px 9px; font-size: .66rem; }
+    .btn-group { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .auto-panel { background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: var(--radius); padding: 14px; color: #fff; margin-bottom: 14px; }
+    .auto-panel .card-title { color: rgba(255,255,255,.75); }
+    .auto-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+    .auto-btn { flex: 1; padding: 9px; border: none; border-radius: 7px; font-size: .8rem; font-weight: 700; cursor: pointer; transition: .2s; }
+    .auto-btn.play { background: rgba(255,255,255,.18); color: #fff; } .auto-btn.play:hover { background: rgba(255,255,255,.28); }
+    .auto-btn.play.active { background: #10b981; }
+    .auto-btn.stop { background: rgba(255,255,255,.1); color: rgba(255,255,255,.8); } .auto-btn.stop:hover { background: rgba(239,68,68,.7); color: #fff; }
+    .auto-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .auto-settings label { font-size: .62rem; color: rgba(255,255,255,.65); display: block; margin-bottom: 2px; }
+    .auto-settings select, .auto-settings input { width: 100%; padding: 5px 7px; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; background: rgba(255,255,255,.12); color: #fff; font-size: .72rem; outline: none; }
+    .auto-settings select option { color: #333; background: #fff; }
+    .auto-progress { height: 3px; background: rgba(255,255,255,.2); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+    .auto-progress-bar { height: 100%; background: rgba(255,255,255,.85); border-radius: 2px; transition: width .3s; width: 0; }
+    .auto-status { margin-top: 7px; font-size: .64rem; color: rgba(255,255,255,.6); display: flex; justify-content: space-between; }
+    .live-badge { font-size: .55rem; background: rgba(16,185,129,.8); padding: 1px 6px; border-radius: 8px; animation: lp 2s infinite; }
+    @keyframes lp { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+    .stats-grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; margin-bottom: 14px; }
+    @media(max-width:800px) { .stats-grid { grid-template-columns: repeat(3,1fr); } }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 9px 6px; text-align: center; cursor: default; }
+    .stat-card.pulse { animation: sp .3s ease; }
+    @keyframes sp { 50% { transform: scale(1.05); } }
+    .stat-value { font-size: .95rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+    .stat-label { font-size: .58rem; color: var(--muted); margin-top: 1px; text-transform: uppercase; }
+    .mem-sec { margin-bottom: 12px; }
+    .mem-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+    .mem-title { font-size: .74rem; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+    .mem-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .mem-info { font-size: .64rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+    .mem-bar { display: flex; height: 38px; border-radius: 7px; overflow: hidden; border: 1px solid var(--border); background: #eef1f5; gap: 1px; }
+    .mem-blk { position: relative; display: flex; align-items: center; justify-content: center; font-size: .55rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #fff; overflow: hidden; cursor: pointer; min-width: 2px; transition: filter .2s, transform .2s; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+    .mem-blk:hover { filter: brightness(1.12); z-index: 5; transform: scaleY(1.06); }
+    .mem-blk.free { background: #eef1f5; color: var(--muted); cursor: default; }
+    .mem-blk.free:hover { transform: none; filter: none; }
+    .mem-blk.selected { outline: 2px solid #1e293b; outline-offset: -2px; z-index: 6; animation: bp 1.2s ease-in-out infinite; }
+    @keyframes bp { 0%,100% { outline-color: #1e293b; } 50% { outline-color: rgba(30,41,59,.3); } }
+    @keyframes ba { 0% { opacity: 0; transform: scaleY(.3); } 60% { opacity: 1; transform: scaleY(1.08); } 100% { opacity: 1; transform: scaleY(1); } }
+    @keyframes bf { 0% { box-shadow: inset 0 0 0 2px rgba(255,255,255,.9); } 100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); } }
+    .mem-blk.appear { animation: ba .35s ease-out; }
+    .mem-blk.flash { animation: bf .45s ease-out; }
+    .region-markers { display: flex; height: 4px; margin-top: 2px; border-radius: 2px; overflow: hidden; gap: 1px; }
+    .region-marker { border-radius: 1px; }
+    .stats-grid-alloc .stat-card { padding: 7px 6px; }
+    .stats-grid-alloc .stat-value { font-size: .82rem; }
+    .mem-bar.iram-zoned {
       position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: .55rem;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      color: #fff;
-      overflow: hidden;
-      cursor: pointer;
-      min-width: 2px;
-      transition: filter .2s, transform .2s;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+      background: linear-gradient(90deg,
+        rgba(249,115,22,.14) 0, rgba(249,115,22,.14) var(--reserve-pct,0%),
+        rgba(236,72,153,.10) var(--reserve-pct,0%), rgba(236,72,153,.10) 100%);
     }
-
-    .mem-blk:hover {
-      filter: brightness(1.12);
-      z-index: 5;
-      transform: scaleY(1.06);
-    }
-
-    .mem-blk.free {
-      background: #eef1f5;
-      color: var(--muted);
-      cursor: default;
-    }
-
-    .mem-blk.free:hover {
-      transform: none;
-      filter: none;
-    }
-
-    .mem-blk.selected {
-      outline: 2px solid #1e293b;
-      outline-offset: -2px;
-      z-index: 6;
-      animation: bp 1.2s ease-in-out infinite;
-    }
-
-    @keyframes bp {
-
-      0%,
-      100% {
-        outline-color: #1e293b;
-      }
-
-      50% {
-        outline-color: rgba(30, 41, 59, .3);
-      }
-    }
-
-    @keyframes ba {
-      0% {
-        opacity: 0;
-        transform: scaleY(.3);
-      }
-
-      60% {
-        opacity: 1;
-        transform: scaleY(1.08);
-      }
-
-      100% {
-        opacity: 1;
-        transform: scaleY(1);
-      }
-    }
-
-    @keyframes bf {
-      0% {
-        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .9);
-      }
-
-      100% {
-        box-shadow: inset 0 0 0 0 rgba(255, 255, 255, 0);
-      }
-    }
-
-    .mem-blk.appear {
-      animation: ba .35s ease-out;
-    }
-
-    .mem-blk.flash {
-      animation: bf .45s ease-out;
-    }
-
-    .region-markers {
-      display: flex;
-      height: 4px;
-      margin-top: 2px;
-      border-radius: 2px;
-      overflow: hidden;
-      gap: 1px;
-    }
-
-    .region-marker {
-      border-radius: 1px;
-    }
-
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 8px;
-      padding: 7px 10px;
-      background: #f8f9fb;
-      border-radius: 7px;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: .62rem;
-      color: var(--muted);
-      font-weight: 600;
-    }
-
-    .legend-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 3px;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 3px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .tab {
-      padding: 6px 14px;
-      font-size: .72rem;
-      font-weight: 600;
-      color: var(--muted);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: .2s;
-    }
-
-    .tab:hover {
-      color: var(--text);
-    }
-
-    .tab.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-      animation: tf .25s ease;
-    }
-
-    @keyframes tf {
-      from {
-        opacity: 0;
-        transform: translateY(5px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .tbl {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .66rem;
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .tbl th {
-      text-align: left;
-      padding: 5px 6px;
-      border-bottom: 1px solid var(--border);
-      color: var(--muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: .58rem;
-    }
-
-    .tbl td {
-      padding: 4px 6px;
-      border-bottom: 1px solid #f1f3f7;
-    }
-
-    .tbl tr:hover td {
-      background: #f8f9fb;
-    }
-
-    .tbl tr.new-row {
-      animation: ra .35s ease;
-    }
-
-    @keyframes ra {
-      from {
-        background: #d1fae5;
-      }
-
-      to {
-        background: transparent;
-      }
-    }
-
-    .log {
-      max-height: 190px;
-      overflow-y: auto;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .62rem;
-      line-height: 1.7;
-      background: #f8f9fb;
-      border-radius: 7px;
-      padding: 7px 9px;
-    }
-
-    .log-entry {
-      padding: 1px 0;
-      border-bottom: 1px solid #f1f3f7;
-    }
-
-    .log-entry.success {
-      color: #059669;
-    }
-
-    .log-entry.error {
-      color: #dc2626;
-    }
-
-    .log-entry.info {
-      color: var(--muted);
-    }
-
-    .log-entry.auto {
-      color: #7c3aed;
-    }
-
-    .tooltip {
-      position: fixed;
-      background: rgba(15, 23, 42, .92);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 7px;
-      font-size: .66rem;
-      font-family: 'JetBrains Mono', monospace;
-      pointer-events: none;
-      z-index: 1000;
-      max-width: 260px;
-      display: none;
-      white-space: pre-line;
-      line-height: 1.5;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, .2);
-    }
-
-    .event-flash {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 999;
-      opacity: 0;
-      transition: opacity .12s;
-    }
-
-    .event-flash.malloc {
-      background: radial-gradient(ellipse at center, rgba(16, 185, 129, .07) 0%, transparent 70%);
-    }
-
-    .event-flash.free {
-      background: radial-gradient(ellipse at center, rgba(239, 68, 68, .07) 0%, transparent 70%);
-    }
-
-    .event-flash.active {
-      opacity: 1;
-    }
-
-    .reinit-badge {
-      font-size: .55rem;
-      padding: 2px 8px;
-      border-radius: 8px;
-      background: #eef2ff;
-      color: var(--accent);
-      font-weight: 700;
-      opacity: 0;
-      transition: opacity .3s;
-    }
-
-    .reinit-badge.visible {
-      opacity: 1;
-    }
-
-    .alloc-form {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 9px;
-      margin-bottom: 10px;
-    }
-
-    .alloc-form .fw {
-      grid-column: 1/-1;
-    }
+    .reserve-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed rgba(249,115,22,.8); pointer-events: none; z-index: 4; }
+    .reserve-tag { position: absolute; top: -16px; transform: translateX(-50%); font-size: .52rem; font-weight: 700; color: #ea580c; background: rgba(255,237,213,.9); padding: 1px 4px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
+    .iram-markers { display: flex; height: 5px; margin-top: 2px; border-radius: 2px; overflow: hidden; gap: 1px; }
+    .iram-marker { border-radius: 1px; }
+    .iram-marker.exec-zone { background: repeating-linear-gradient(45deg, #f97316, #f97316 3px, #fb923c 3px, #fb923c 6px); }
+    .region-section-row td { background: #f1f3f7 !important; font-size: .56rem !important; font-weight: 800 !important; text-transform: uppercase; letter-spacing: .08em; color: var(--muted) !important; padding: 5px 6px !important; border-top: 2px solid var(--border) !important; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; padding: 7px 10px; background: #f8f9fb; border-radius: 7px; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: .62rem; color: var(--muted); font-weight: 600; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+    .tabs { display: flex; gap: 3px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 6px 14px; font-size: .72rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: .2s; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: tf .25s ease; }
+    @keyframes tf { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    .tbl { width: 100%; border-collapse: collapse; font-size: .66rem; font-family: 'JetBrains Mono', monospace; }
+    .tbl th { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .58rem; }
+    .tbl td { padding: 4px 6px; border-bottom: 1px solid #f1f3f7; }
+    .tbl tr:hover td { background: #f8f9fb; }
+    .tbl tr.new-row { animation: ra .35s ease; }
+    @keyframes ra { from { background: #d1fae5; } to { background: transparent; } }
+    .log { max-height: 190px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: .62rem; line-height: 1.7; background: #f8f9fb; border-radius: 7px; padding: 7px 9px; }
+    .log-entry { padding: 1px 0; border-bottom: 1px solid #f1f3f7; }
+    .log-entry.success { color: #059669; } .log-entry.error { color: #dc2626; }
+    .log-entry.info { color: var(--muted); } .log-entry.auto { color: #7c3aed; }
+    .tooltip { position: fixed; background: rgba(15,23,42,.92); color: #fff; padding: 8px 12px; border-radius: 7px; font-size: .66rem; font-family: 'JetBrains Mono', monospace; pointer-events: none; z-index: 1000; max-width: 260px; display: none; white-space: pre-line; line-height: 1.5; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+    .event-flash { position: fixed; inset: 0; pointer-events: none; z-index: 999; opacity: 0; transition: opacity .12s; }
+    .event-flash.malloc { background: radial-gradient(ellipse at center, rgba(16,185,129,.07) 0%, transparent 70%); }
+    .event-flash.free { background: radial-gradient(ellipse at center, rgba(239,68,68,.07) 0%, transparent 70%); }
+    .event-flash.active { opacity: 1; }
+    .reinit-badge { font-size: .55rem; padding: 2px 8px; border-radius: 8px; background: #eef2ff; color: var(--accent); font-weight: 700; opacity: 0; transition: opacity .3s; }
+    .reinit-badge.visible { opacity: 1; }
+    .alloc-form { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 10px; }
+    .alloc-form .fw { grid-column: 1/-1; }
   </style>
 </head>
-
 <body>
   <div class="event-flash" id="eventFlash"></div>
   <div class="tooltip" id="tooltip"></div>
@@ -750,9 +131,7 @@
     <div class="layout">
       <div>
         <div class="auto-panel">
-          <div class="card-title"><span>🤖 Auto Mode</span>
-            <span class="live-badge" id="liveBadge" style="display:none">● LIVE</span>
-          </div>
+          <div class="card-title"><span>🤖 Auto Mode</span><span class="live-badge" id="liveBadge" style="display:none">● LIVE</span></div>
           <div class="auto-controls">
             <button class="auto-btn play" id="btnPlay" onclick="toggleAuto()">▶ Start</button>
             <button class="auto-btn stop" onclick="stopAuto()">⏹ Stop</button>
@@ -760,121 +139,89 @@
           <div class="auto-settings">
             <div><label>Scenario</label>
               <select id="autoScenario">
-                <option value="random">🎲 Random</option>
-                <option value="wifi">📶 WiFi Station</option>
-                <option value="stress">💥 Stress</option>
-                <option value="fragment">🧩 Fragmentation</option>
-                <option value="exec">⚡ EXEC</option>
-                <option value="mixed">🔄 Mixed</option>
+                <option value="random">🎲 Random</option><option value="wifi">📶 WiFi Station</option>
+                <option value="stress">💥 Stress</option><option value="fragment">🧩 Fragmentation</option>
+                <option value="exec">⚡ EXEC</option><option value="mixed">🔄 Mixed</option>
               </select>
             </div>
             <div><label>Speed</label>
               <select id="autoSpeed" onchange="onSpeedChange()">
-                <option value="2000">🐢 2s</option>
-                <option value="1000">🚶 1s</option>
-                <option value="500">🏃 0.5s</option>
-                <option value="200">⚡ 0.2s</option>
+                <option value="2000">🐢 2s</option><option value="1000">🚶 1s</option>
+                <option value="500">🏃 0.5s</option><option value="200">⚡ 0.2s</option>
                 <option value="50" selected>🚀 50ms</option>
               </select>
             </div>
-            <div><label>Max Blocks</label>
-              <input type="number" id="autoMaxBlocks" value="120" min="10" max="400">
-            </div>
-            <div><label>% Free Ops</label>
-              <input type="number" id="autoFreePercent" value="50" min="0" max="90" step="5">
-            </div>
+            <div><label>Max Blocks</label><input type="number" id="autoMaxBlocks" value="120" min="10" max="400"></div>
+            <div><label>% Free Ops</label><input type="number" id="autoFreePercent" value="30" min="0" max="90" step="5"></div>
           </div>
-          <div class="auto-progress">
-            <div class="auto-progress-bar" id="autoProgress"></div>
-          </div>
-          <div class="auto-status">
-            <span id="autoStepCount">Step: 0</span><span id="autoAllocCount">M:0 F:0 Err:0</span>
-          </div>
+          <div class="auto-progress"><div class="auto-progress-bar" id="autoProgress"></div></div>
+          <div class="auto-status"><span id="autoStepCount">Step: 0</span><span id="autoAllocCount">M:0 F:0 Err:0</span></div>
         </div>
         <div class="card" style="margin-bottom:14px">
-          <div class="card-title"><span>⚙️ Arena</span>
-            <span class="reinit-badge" id="reinitBadge">Applied ✓</span>
-          </div>
+          <div class="card-title"><span>⚙️ Arena</span><span class="reinit-badge" id="reinitBadge">Applied ✓</span></div>
           <div class="sg"><label>Region Config</label>
-            <input type="text" id="regionConfig" value="4-12%,128-14%,256-10%,512-22%,1280-0%"
-              oninput="scheduleReinit()">
+            <input type="text" id="regionConfig" value="4-12%,128-14%,256-10%,512-22%,1280-0%" oninput="scheduleReinit()">
           </div>
           <div class="sg"><label>DRAM Size (bytes)</label>
-            <input type="number" id="dramSize" value="45000" min="4096" max="131072" step="4096"
-              oninput="scheduleReinit()">
+            <input type="number" id="dramSize" value="45000" min="4096" max="131072" step="4096" oninput="scheduleReinit()">
           </div>
           <div class="sg"><label>Max DRAM Desc</label>
             <input type="number" id="maxDesc" value="256" min="1" max="4096" oninput="scheduleReinit()">
           </div>
-          <label class="cbx"><input type="checkbox" id="useIram" checked onchange="scheduleReinit()">
+          <label class="cbx"><input type="checkbox" id="useIram" checked onchange="refreshControlStates(); scheduleReinit()">
             <span>Enable IRAM heap</span></label>
-          <div class="sg"><label>IRAM Size</label>
-            <input type="number" id="iramSize" value="23000" min="512" max="65536" step="256"
-              oninput="scheduleReinit()">
+          <div id="iramSettings">
+            <div class="sg"><label>IRAM Size</label>
+              <input type="number" id="iramSize" value="23000" min="512" max="65536" step="256" oninput="scheduleReinit()">
+            </div>
+            <div class="sg"><label>IRAM Reserve</label>
+              <input type="number" id="iramReserve" value="2048" min="0" max="32768" step="256" oninput="scheduleReinit()">
+            </div>
+            <div class="sg"><label>IRAM Fallback Max (0=∞)</label>
+              <input type="number" id="iramFallbackMax" value="0" min="0" max="65536" step="256" oninput="scheduleReinit()">
+            </div>
+            <div class="sg"><label>IRAM FB Region Config</label>
+              <input type="text" id="iramFbRegions" value="4-0%" placeholder="4-0% or 4-40%,128-0%" oninput="scheduleReinit()">
+            </div>
+            <div class="sg"><label>Max IRAM Desc</label>
+              <input type="number" id="maxIramDesc" value="128" min="1" max="4096" oninput="scheduleReinit()">
+            </div>
           </div>
-          <div class="sg"><label>IRAM Reserve</label>
-            <input type="number" id="iramReserve" value="2048" min="0" max="32768" step="256"
-              oninput="scheduleReinit()">
-          </div>
-          <div class="sg"><label>IRAM Fallback Max (0=∞)</label>
-            <input type="number" id="iramFallbackMax" value="0" min="0" max="65536" step="256"
-              oninput="scheduleReinit()">
-          </div>
-          <div class="sg"><label>Max IRAM Desc</label>
-            <input type="number" id="maxIramDesc" value="128" min="1" max="4096" oninput="scheduleReinit()">
-          </div>
-          <label class="cbx"><input type="checkbox" id="crossRegion" checked onchange="scheduleReinit()">
+          <label class="cbx"><input type="checkbox" id="crossRegion" checked onchange="refreshControlStates(); scheduleReinit()">
             <span>Cross-region fallback</span></label>
+          <label class="cbx"><input type="checkbox" id="crossLargest" onchange="scheduleReinit()">
+            <span>Cross-region check largest</span></label>
         </div>
-
-        <div class="card">
-          <div class="card-title">📝 Log</div>
-          <div class="log" id="log"></div>
-        </div>
+        <div class="card"><div class="card-title">📝 Log</div><div class="log" id="log"></div></div>
       </div>
       <div>
         <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-value" id="stTotal">0</div>
-            <div class="stat-label">Total</div>
-          </div>
-          <div class="stat-card" id="stFreeCard">
-            <div class="stat-value" id="stFree">0</div>
-            <div class="stat-label">Free</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stMinFree">0</div>
-            <div class="stat-label">Min Free</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stLargest">0</div>
-            <div class="stat-label">Largest</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stActive">0</div>
-            <div class="stat-label">Active</div>
-          </div>
-          <div class="stat-card" id="stFailedCard" title="">
-            <div class="stat-value" id="stFailed">0</div>
-            <div class="stat-label">Failed</div>
-          </div>
+          <div class="stat-card"><div class="stat-value" id="stTotal">0</div><div class="stat-label">Total</div></div>
+          <div class="stat-card" id="stFreeCard"><div class="stat-value" id="stFree">0</div><div class="stat-label">Free</div></div>
+          <div class="stat-card"><div class="stat-value" id="stMinFree">0</div><div class="stat-label">Min Free</div></div>
+          <div class="stat-card"><div class="stat-value" id="stLargest">0</div><div class="stat-label">Largest</div></div>
+          <div class="stat-card"><div class="stat-value" id="stActive">0</div><div class="stat-label">Active</div></div>
+          <div class="stat-card" id="stFailedCard" title=""><div class="stat-value" id="stFailed">0</div><div class="stat-label">Failed</div></div>
+        </div>
+        <div class="stats-grid stats-grid-alloc">
+          <div class="stat-card" title="EXEC allocations (IRAM, first-fit)"><div class="stat-value" id="stExec" style="color:#8b5cf6">0</div><div class="stat-label">EXEC</div></div>
+          <div class="stat-card" title="IRAM fallback allocations (32-bit, last-fit)"><div class="stat-value" id="stIramFb" style="color:#ec4899">0</div><div class="stat-label">IRAM fb</div></div>
+          <div class="stat-card" title="Cross-region fallback allocations"><div class="stat-value" id="stCross" style="color:#eab308">0</div><div class="stat-label">Cross</div></div>
+          <div class="stat-card" title="Cross-region candidates skipped (fragmented, check-largest only)"><div class="stat-value" id="stCrossSkip" style="color:#94a3b8">0</div><div class="stat-label">Cross skip</div></div>
+          <div class="stat-card" title="Peak active descriptor count"><div class="stat-value" id="stMaxActive">0</div><div class="stat-label">Max Active</div></div>
+          <div class="stat-card" title="Descriptor table usage"><div class="stat-value" id="stDesc">0</div><div class="stat-label">Desc</div></div>
         </div>
         <div class="card" style="margin-bottom:14px">
           <div class="card-title">🗺️ Memory Map</div>
           <div class="mem-sec">
-            <div class="mem-hdr">
-              <span class="mem-title"><span class="mem-dot" style="background:#4f6ef7"></span>DRAM</span>
-              <span class="mem-info" id="dramInfo"></span>
-            </div>
+            <div class="mem-hdr"><span class="mem-title"><span class="mem-dot" style="background:#4f6ef7"></span>DRAM</span><span class="mem-info" id="dramInfo"></span></div>
             <div class="mem-bar" id="dramBar"></div>
             <div class="region-markers" id="dramMarkers"></div>
           </div>
           <div class="mem-sec" id="iramSec">
-            <div class="mem-hdr">
-              <span class="mem-title"><span class="mem-dot" style="background:#8b5cf6"></span>IRAM</span>
-              <span class="mem-info" id="iramInfo"></span>
-            </div>
+            <div class="mem-hdr"><span class="mem-title"><span class="mem-dot" style="background:#8b5cf6"></span>IRAM</span><span class="mem-info" id="iramInfo"></span></div>
             <div class="mem-bar" id="iramBar"></div>
+            <div class="region-markers" id="iramMarkers"></div>
           </div>
           <div class="legend" id="legend"></div>
         </div>
@@ -886,15 +233,11 @@
           </div>
           <div class="tab-content active" id="tab-alloc">
             <div class="alloc-form">
-              <div class="sg"><label>Size (bytes)</label>
-                <input type="number" id="allocSize" value="64" min="1" max="131072">
-              </div>
+              <div class="sg"><label>Size (bytes)</label><input type="number" id="allocSize" value="64" min="1" max="131072"></div>
               <div class="sg"><label>Capabilities</label>
                 <select id="allocCaps">
-                  <option value="2">MALLOC_CAP_32BIT</option>
-                  <option value="1">MALLOC_CAP_EXEC</option>
-                  <option value="6">32BIT | 8BIT</option>
-                  <option value="14">32BIT | 8BIT | DMA</option>
+                  <option value="2">MALLOC_CAP_32BIT</option><option value="1">MALLOC_CAP_EXEC</option>
+                  <option value="6">32BIT | 8BIT</option><option value="14">32BIT | 8BIT | DMA</option>
                   <option value="0">ANY</option>
                 </select>
               </div>
@@ -916,35 +259,14 @@
           <div class="tab-content" id="tab-desc">
             <div style="max-height:300px;overflow-y:auto">
               <table class="tbl">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Arena</th>
-                    <th>Offset</th>
-                    <th>Len</th>
-                    <th>EXEC</th>
-                    <th>Region</th>
-                    <th></th>
-                  </tr>
-                </thead>
+                <thead><tr><th>#</th><th>Arena</th><th>Offset</th><th>Len</th><th>EXEC</th><th>Region</th><th></th></tr></thead>
                 <tbody id="descTable"></tbody>
               </table>
             </div>
           </div>
           <div class="tab-content" id="tab-regions">
             <table class="tbl">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Min</th>
-                  <th>Max</th>
-                  <th>Total</th>
-                  <th>Free</th>
-                  <th>MinFree</th>
-                  <th>Largest</th>
-                  <th>Allocs</th>
-                </tr>
-              </thead>
+              <thead><tr><th>#</th><th>Min</th><th>Max</th><th>Total</th><th>Free</th><th>MinFree</th><th>Largest</th><th>Allocs</th></tr></thead>
               <tbody id="regionTable"></tbody>
             </table>
           </div>
@@ -952,13 +274,17 @@
       </div>
     </div>
   </div>
-
   <script>
     const A = 4, AM = 3;
     const CAP_EXEC = 1, CAP_32 = 2, CAP_8 = 4, CAP_DMA = 8, CAP_SPIRAM = 1024, CAP_INT = 2048;
     const DRAM_CAPS = CAP_8 | CAP_32 | CAP_DMA | CAP_INT;
     function al4(b) { return (b + AM) & ~AM; }
-
+    function numOr(id, def) {
+      const el = document.getElementById(id);
+      if (!el) return def;
+      const v = el.value.trim();
+      return v === '' ? def : +v;
+    }
     function regionColor(i, total) {
       const hue = (i * 360 / Math.max(total, 1) + 210) % 360;
       return `hsl(${hue}, 72%, 52%)`;
@@ -967,12 +293,9 @@
       const hue = (i * 360 / Math.max(total, 1) + 210) % 360;
       return `hsl(${hue}, 72%, 42%)`;
     }
-    const EXEC_COLOR = '#8b5cf6';
-    const EXEC_COLOR_D = '#7c3aed';
-    const FALLBACK_COLOR = '#ec4899';
-    const FALLBACK_COLOR_D = '#db2777';
-    const CROSS_COLOR = '#eab308';
-    const CROSS_COLOR_D = '#ca8a04';
+    const EXEC_COLOR = '#8b5cf6', EXEC_COLOR_D = '#7c3aed';
+    const FALLBACK_COLOR = '#ec4899', FALLBACK_COLOR_D = '#db2777';
+    const CROSS_COLOR = '#eab308', CROSS_COLOR_D = '#ca8a04';
 
     class MxR {
       constructor() { this.ok = false; this.map = new Map(); this.offIndex = new Map(); this.idc = 0; }
@@ -980,58 +303,65 @@
         this.dramTotal = al4(c.dramSize); this.maxDesc = c.maxDesc;
         this.maxIDesc = c.maxIramDesc; this.iramRes = al4(c.iramReserve);
         this.iramFbMax = al4(c.iramFallbackMax || 0);
-        this.cross = c.crossRegion; this.regions = []; this.dDesc = []; this.iDesc = [];
+        this.cross = c.crossRegion; this.crossLargest = !!c.crossLargest;
+        this.regions = []; this.iramFbRegions = []; this.dDesc = []; this.iDesc = [];
         if (c.useIram) {
           this.iramOn = true; this.iramTotal = al4(c.iramSize);
           this.iramFree = this.iramTotal; this.iramMinFree = this.iramTotal;
-        } else { this.iramOn = false; this.iramTotal = 0; this.iramFree = 0; }
-        const es = c.regionConfig.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        } else { this.iramOn = false; this.iramTotal = 0; this.iramFree = 0; this.iramMinFree = 0; }
+        if (!this._parseRegions(c.regionConfig, this.dramTotal, DRAM_CAPS, 0, this.regions)) return false;
+        if (this.iramOn) {
+          const fbTotal = Math.max(0, this.iramTotal - this.iramRes);
+          if (!this._parseRegions(c.iramFbRegions || '4-0%', fbTotal, CAP_32, this.iramRes, this.iramFbRegions)) return false;
+        }
+        let tot = this.dramTotal, fr = this.dramTotal;
+        if (this.iramOn) { tot += this.iramTotal; fr += this.iramTotal; }
+        this.stats = { total: tot, free: fr, minFree: tot, largest: 0, active: 0, maxActive: 0, exec: 0, iramFb: 0, cross: 0, crossSkip: 0, failMem: 0, failTbl: 0, badFree: 0 };
+        this.map.clear(); this.offIndex.clear(); this.idc = 0; this.ok = true; return true;
+      }
+      _parseRegions(str, totalBytes, caps, startOff, out) {
+        const es = str.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        if (!es.length) {
+          out.push({ caps, start: startOff, total: totalBytes, min: 4, max: 0, free: totalBytes, minFree: totalBytes, allocs: 0 });
+          return true;
+        }
         const cfgs = [];
         for (const e of es) {
           const m = e.match(/^(\d+)-(\d+)%$/);
           if (!m) { addLog(`Bad region: '${e}'`, 'error'); return false; }
           cfgs.push({ min: +m[1], pct: +m[2] });
         }
+        const pctSum = cfgs.reduce((s, c) => s + c.pct, 0);
+        if (pctSum > 100) { addLog(`Percent sum ${pctSum} > 100`, 'error'); return false; }
         if (cfgs.length <= 1) {
           const mb = cfgs.length === 1 ? Math.max(al4(cfgs[0].min), A) : A;
-          this.regions.push({
-            caps: DRAM_CAPS, start: 0, total: this.dramTotal, min: mb, max: 0,
-            free: this.dramTotal, minFree: this.dramTotal, allocs: 0
-          });
-        } else {
-          let rem = this.dramTotal, st = 0;
-          for (let i = 0; i < cfgs.length; i++) {
-            const mb = Math.max(al4(cfgs[i].min), A);
-            const mx = (i === cfgs.length - 1) ? 0 : Math.max(al4(cfgs[i + 1].min), A) - 1;
-            let b = (i === cfgs.length - 1 && cfgs[i].pct === 0) ? rem : al4(Math.floor(this.dramTotal * cfgs[i].pct / 100));
-            if (b < mb) b = mb;
-            if (b > rem) { addLog(`Region ${i} too large`, 'error'); return false; }
-            this.regions.push({ caps: DRAM_CAPS, start: st, total: b, min: mb, max: mx, free: b, minFree: b, allocs: 0 });
-            st += b; rem -= b;
-          }
-          if (rem > 0) {
-            const l = this.regions[this.regions.length - 1];
-            l.total += rem; l.free = l.total; l.minFree = l.free;
-          }
+          out.push({ caps, start: startOff, total: totalBytes, min: mb, max: 0, free: totalBytes, minFree: totalBytes, allocs: 0 });
+          return true;
         }
-        let tot = this.dramTotal, fr = this.dramTotal;
-        if (this.iramOn) { tot += this.iramTotal; fr += this.iramTotal; }
-        this.stats = {
-          total: tot, free: fr, minFree: tot,
-          largest: Math.max(...this.regions.map(r => r.total), this.iramOn ? this.iramTotal : 0),
-          active: 0, maxActive: 0, exec: 0, fb: 0, cross: 0, failMem: 0, failTbl: 0, badFree: 0
-        };
-        this.map.clear(); this.offIndex.clear(); this.idc = 0; this.ok = true; return true;
+        let rem = totalBytes, st = startOff;
+        for (let i = 0; i < cfgs.length; i++) {
+          const mb = Math.max(al4(cfgs[i].min), A);
+          const mx = (i === cfgs.length - 1) ? 0 : Math.max(al4(cfgs[i + 1].min), A) - 1;
+          let b = (i === cfgs.length - 1 && cfgs[i].pct === 0) ? rem : al4(Math.floor(totalBytes * cfgs[i].pct / 100));
+          if (b < mb) b = mb;
+          if (b > rem) { addLog(`Region ${i} too large`, 'error'); return false; }
+          out.push({ caps, start: st, total: b, min: mb, max: mx, free: b, minFree: b, allocs: 0 });
+          st += b; rem -= b;
+        }
+        if (rem > 0) { const l = out[out.length - 1]; l.total += rem; l.free = l.total; l.minFree = l.free; }
+        return true;
       }
       _idxKey(arena, off) { return arena + '_' + off; }
       _idxAdd(id, arena, off) { this.offIndex.set(this._idxKey(arena, off), id); }
       _idxDel(arena, off) { this.offIndex.delete(this._idxKey(arena, off)); }
       _idxGet(arena, off) { return this.offIndex.get(this._idxKey(arena, off)); }
-      regForSize(len, caps) {
-        for (let i = 0; i < this.regions.length; i++) {
-          const r = this.regions[i];
-          if ((r.caps & caps) !== caps) continue; if (len < r.min) continue;
-          if (r.max !== 0 && len > r.max) continue; return i;
+      regForSizeArr(regs, len, caps) {
+        for (let i = 0; i < regs.length; i++) {
+          const r = regs[i];
+          if ((r.caps & caps) !== caps) continue;
+          if (len < r.min) continue;
+          if (r.max !== 0 && len > r.max) continue;
+          return i;
         } return -1;
       }
       regByOff(off) {
@@ -1040,17 +370,57 @@
           if (off >= r.start && off < r.start + r.total) return i;
         } return -1;
       }
-      findFree(ri, bytes) {
-        const rs = this.regions[ri].start, re = rs + this.regions[ri].total;
-        let cur = rs;
+      iFbRegByOff(off) {
+        for (let i = 0; i < this.iramFbRegions.length; i++) {
+          const r = this.iramFbRegions[i];
+          if (off >= r.start && off < r.start + r.total) return i;
+        } return -1;
+      }
+      findFreeAndLargest(ri, bytes) {
+        const r = this.regions[ri]; const rs = r.start, re = rs + r.total;
+        let cur = rs, largest = 0, found = -1;
         for (const d of this.dDesc) {
           if (d.off + d.len <= rs) continue; if (d.off >= re) break;
-          if (d.off > cur && d.off - cur >= bytes) return cur;
+          if (d.off > cur) { const gap = d.off - cur; if (gap > largest) largest = gap; if (found < 0 && gap >= bytes) found = cur; }
           if (d.off + d.len > cur) cur = d.off + d.len;
           if (cur >= re) break;
         }
-        if (re > cur && re - cur >= bytes) return cur;
+        if (re > cur) { const gap = re - cur; if (gap > largest) largest = gap; if (found < 0 && gap >= bytes) found = cur; }
+        return { off: found, largest };
+      }
+      findFreeAndLargestLast(ri, bytes) {
+        const r = this.iramFbRegions[ri]; const rs = r.start, re = rs + r.total;
+        let cand = re, largest = 0, found = -1;
+        for (let i = this.iDesc.length - 1; i >= 0; i--) {
+          const d = this.iDesc[i], be = d.off + d.len;
+          if (be <= rs) break; if (d.off >= re) continue;
+          if (cand > be) { const gap = cand - be; if (gap > largest) largest = gap; if (found < 0 && gap >= bytes) found = cand - bytes; }
+          if (d.off < cand) cand = d.off;
+          if (cand <= rs) break;
+        }
+        if (cand > rs) { const gap = cand - rs; if (gap > largest) largest = gap; if (found < 0 && gap >= bytes) found = cand - bytes; }
+        return { off: found, largest };
+      }
+      iFreeStart(bytes) {
+        let cur = 0;
+        for (const d of this.iDesc) {
+          if (d.off > cur && d.off - cur >= bytes) return cur;
+          if (d.off + d.len > cur) cur = d.off + d.len;
+        }
+        if (this.iramTotal > cur && this.iramTotal - cur >= bytes) return cur;
         return -1;
+      }
+      crossOrder(n, skip) {
+        const order = [];
+        if (skip < 0 || skip >= n) { for (let i = 0; i < n; i++) order.push(i); return order; }
+        if (skip < n / 2) {
+          for (let i = skip + 1; i < n; i++) order.push(i);
+          for (let i = skip - 1; i >= 0; i--) order.push(i);
+        } else {
+          for (let i = skip - 1; i >= 0; i--) order.push(i);
+          for (let i = skip + 1; i < n; i++) order.push(i);
+        }
+        return order;
       }
       dInsert(off, len) {
         if (len === 0 || off + len > this.dramTotal) return false;
@@ -1063,10 +433,8 @@
       }
       dFind(off) {
         let l = 0, r = this.dDesc.length;
-        while (l < r) {
-          const m = (l + r) >> 1; if (this.dDesc[m].off === off) return m;
-          if (this.dDesc[m].off < off) l = m + 1; else r = m;
-        } return -1;
+        while (l < r) { const m = (l + r) >> 1; if (this.dDesc[m].off === off) return m; if (this.dDesc[m].off < off) l = m + 1; else r = m; }
+        return -1;
       }
       iInsert(off, len, exec) {
         if (!this.iramOn || len === 0 || off + len > this.iramTotal) return false;
@@ -1079,87 +447,8 @@
       }
       iFind(off) {
         let l = 0, r = this.iDesc.length;
-        while (l < r) {
-          const m = (l + r) >> 1; if (this.iDesc[m].off === off) return m;
-          if (this.iDesc[m].off < off) l = m + 1; else r = m;
-        } return -1;
-      }
-      iFreeStart(bytes) {
-        let cur = 0;
-        for (const d of this.iDesc) {
-          if (d.off > cur && d.off - cur >= bytes) return cur;
-          if (d.off + d.len > cur) cur = d.off + d.len;
-        }
-        if (this.iramTotal > cur && this.iramTotal - cur >= bytes) return cur;
+        while (l < r) { const m = (l + r) >> 1; if (this.iDesc[m].off === off) return m; if (this.iDesc[m].off < off) l = m + 1; else r = m; }
         return -1;
-      }
-      iFreeEnd(bytes) {
-        let ce = this.iramTotal;
-        for (let i = this.iDesc.length - 1; i >= 0; i--) {
-          const d = this.iDesc[i], be = d.off + d.len;
-          if (ce > be && ce - be >= bytes) return ce - bytes;
-          if (d.off < ce) ce = d.off;
-        }
-        if (ce >= bytes) return ce - bytes; return -1;
-      }
-      iCanFb(bytes) {
-        if (!this.iramOn || this.iDesc.length >= this.maxIDesc) return false;
-        if (this.iramFree < bytes) return false;
-        if (this.iramFree < bytes + this.iramRes) return false;
-        if (this.iramFbMax !== 0 && bytes > this.iramFbMax) return false;
-        return true;
-      }
-      iCanGrowFb(oldBytes, newBytes) {
-        if (!this.iramOn) return false;
-        if (newBytes <= oldBytes) return true;
-        const extra = newBytes - oldBytes;
-        if (this.iramFree < extra + this.iramRes) return false;
-        if (this.iramFbMax !== 0 && newBytes > this.iramFbMax) return false;
-        return true;
-      }
-      regAlloc(ri, b) {
-        if (ri >= 0 && ri < this.regions.length) {
-          const r = this.regions[ri];
-          r.free = Math.max(0, r.free - b); if (r.free < r.minFree) r.minFree = r.free;
-        }
-        this.stats.free = Math.max(0, this.stats.free - b);
-        if (this.stats.free < this.stats.minFree) this.stats.minFree = this.stats.free;
-      }
-      regRelease(ri, b) {
-        if (ri >= 0 && ri < this.regions.length) {
-          const r = this.regions[ri];
-          r.free = Math.min(r.total, r.free + b);
-        }
-        this.stats.free = Math.min(this.stats.total, this.stats.free + b);
-      }
-      iAlloc(b) {
-        this.iramFree = Math.max(0, this.iramFree - b);
-        if (this.iramFree < this.iramMinFree) this.iramMinFree = this.iramFree;
-        this.stats.free = Math.max(0, this.stats.free - b);
-        if (this.stats.free < this.stats.minFree) this.stats.minFree = this.stats.free;
-      }
-      iRelease(b) {
-        this.iramFree = Math.min(this.iramTotal, this.iramFree + b);
-        this.stats.free = Math.min(this.stats.total, this.stats.free + b);
-      }
-      tryCross(bytes, caps, skip) {
-        const tried = new Set(); if (skip >= 0) tried.add(skip);
-        for (; ;) {
-          let best = -1, bm = Infinity;
-          for (let i = 0; i < this.regions.length; i++) {
-            if (tried.has(i)) continue;
-            if ((this.regions[i].caps & caps) !== caps) continue;
-            if (this.regions[i].free < bytes) continue;
-            if (this.regions[i].min < bm) { bm = this.regions[i].min; best = i; }
-          }
-          if (best < 0) return null;
-          tried.add(best);
-          const off = this.findFree(best, bytes);
-          if (off < 0) continue;
-          if (!this.dInsert(off, bytes)) return null;
-          this.regions[best].allocs++; this.regAlloc(best, bytes); this.stats.cross++;
-          return { off, len: bytes, arena: 'dram', exec: false, region: best, cross: true };
-        }
       }
       _capsAllowIramFb(caps) {
         if (!this.iramOn) return false;
@@ -1167,57 +456,100 @@
         if (caps & (CAP_DMA | CAP_8 | CAP_SPIRAM)) return false;
         return (caps & CAP_32) || caps === 0;
       }
+      regAlloc(ri, b) { if (ri >= 0 && ri < this.regions.length) { const r = this.regions[ri]; r.free = Math.max(0, r.free - b); if (r.free < r.minFree) r.minFree = r.free; } this._decFree(b); }
+      regRelease(ri, b) { if (ri >= 0 && ri < this.regions.length) { const r = this.regions[ri]; r.free = Math.min(r.total, r.free + b); } this._incFree(b); }
+      iAlloc(b) { this.iramFree = Math.max(0, this.iramFree - b); if (this.iramFree < this.iramMinFree) this.iramMinFree = this.iramFree; this._decFree(b); }
+      iRelease(b) { this.iramFree = Math.min(this.iramTotal, this.iramFree + b); this._incFree(b); }
+      iFbRegAlloc(ri, b) { if (ri >= 0 && ri < this.iramFbRegions.length) { const r = this.iramFbRegions[ri]; r.free = Math.max(0, r.free - b); if (r.free < r.minFree) r.minFree = r.free; } this.iAlloc(b); }
+      iFbRegRelease(ri, b) { if (ri >= 0 && ri < this.iramFbRegions.length) { const r = this.iramFbRegions[ri]; r.free = Math.min(r.total, r.free + b); } this.iRelease(b); }
+      iFbAccountAlloc(off, len) {
+        const end = off + len;
+        for (const r of this.iramFbRegions) {
+          const rs = r.start, re = rs + r.total;
+          const lo = Math.max(off, rs), hi = Math.min(end, re);
+          if (lo < hi) { const part = hi - lo; r.free = Math.max(0, r.free - part); if (r.free < r.minFree) r.minFree = r.free; }
+        }
+      }
+      iFbAccountFree(off, len) {
+        const end = off + len;
+        for (const r of this.iramFbRegions) {
+          const rs = r.start, re = rs + r.total;
+          const lo = Math.max(off, rs), hi = Math.min(end, re);
+          if (lo < hi) { const part = hi - lo; r.free = Math.min(r.total, r.free + part); }
+        }
+      }
+      _decFree(b) { this.stats.free = Math.max(0, this.stats.free - b); if (this.stats.free < this.stats.minFree) this.stats.minFree = this.stats.free; }
+      _incFree(b) { this.stats.free = Math.min(this.stats.total, this.stats.free + b); }
+      _bumpActive() { this.stats.active++; if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active; }
       malloc(size, caps) {
         if (!this.ok) return null;
         if (size === 0) size = 1; size = al4(size);
         if (caps & CAP_EXEC) {
-          if ((caps & ~(CAP_EXEC | CAP_32 | CAP_INT)) !== 0) {
-            this.stats.failMem++; return null;
-          }
+          if ((caps & ~(CAP_EXEC | CAP_32 | CAP_INT)) !== 0) { this.stats.failMem++; return null; }
           if (!this.iramOn) { this.stats.failMem++; return null; }
           const off = this.iFreeStart(size);
           if (off < 0) { this.stats.failMem++; return null; }
           if (!this.iInsert(off, size, true)) return null;
-          this.iAlloc(size); this.stats.exec++; this.stats.active++;
-          if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
+          this.iAlloc(size); this.iFbAccountAlloc(off, size);
+          this.stats.exec++; this._bumpActive();
           const id = ++this.idc;
           this.map.set(id, { off, len: size, arena: 'iram', exec: true, region: -1, cross: false });
-          this._idxAdd(id, 'iram', off);
-          return id;
+          this._idxAdd(id, 'iram', off); return id;
         }
-        if (this._capsAllowIramFb(caps) && this.iCanFb(size)) {
-          const off = this.iFreeEnd(size);
-          if (off >= 0 && this.iInsert(off, size, false)) {
-            this.iAlloc(size); this.stats.fb++; this.stats.active++;
-            if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
-            const id = ++this.idc;
-            this.map.set(id, { off, len: size, arena: 'iram', exec: false, region: -1, cross: false });
-            this._idxAdd(id, 'iram', off);
-            return id;
+        if (this._capsAllowIramFb(caps) && (this.iramFbMax === 0 || size <= this.iramFbMax)) {
+          let off = -1, hostReg = -1, usedCross = false;
+          const reg = this.regForSizeArr(this.iramFbRegions, size, caps);
+          if (reg >= 0 && this.iramFbRegions[reg].free >= size) {
+            const res = this.findFreeAndLargestLast(reg, size);
+            if (res.off >= 0) { off = res.off; hostReg = reg; }
           }
-        }
-        const ri = this.regForSize(size, caps);
-        if (ri >= 0) {
-          const off = this.findFree(ri, size);
+          if (off < 0 && this.cross) {
+            for (const i of this.crossOrder(this.iramFbRegions.length, reg)) {
+              if (i === reg) continue;
+              const r = this.iramFbRegions[i];
+              if (r.free < size) continue;
+              const res = this.findFreeAndLargestLast(i, size);
+              if (res.off < 0) { if (this.crossLargest) this.stats.crossSkip++; continue; }
+              off = res.off; hostReg = i; usedCross = true; break;
+            }
+          }
           if (off >= 0) {
-            if (!this.dInsert(off, size)) return null;
-            this.regions[ri].allocs++; this.regAlloc(ri, size);
-            this.stats.active++;
-            if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
+            if (!this.iInsert(off, size, false)) return null;
+            this.iramFbRegions[hostReg].allocs++;
+            this.iFbRegAlloc(hostReg, size);
+            this.stats.iramFb++; if (usedCross) this.stats.cross++;
+            this._bumpActive();
             const id = ++this.idc;
-            this.map.set(id, { off, len: size, arena: 'dram', exec: false, region: ri, cross: false });
-            this._idxAdd(id, 'dram', off);
-            return id;
+            this.map.set(id, { off, len: size, arena: 'iram', exec: false, region: hostReg, cross: usedCross });
+            this._idxAdd(id, 'iram', off); return id;
           }
         }
-        if (this.cross) {
-          const r = this.tryCross(size, caps, ri);
-          if (r) {
-            this.stats.active++;
-            if (this.stats.active > this.stats.maxActive) this.stats.maxActive = this.stats.active;
-            const id = ++this.idc; this.map.set(id, r);
-            this._idxAdd(id, 'dram', r.off); return id;
+        const ri = this.regForSizeArr(this.regions, size, caps);
+        let off = -1, hostReg = ri, usedCross = false;
+        if (ri >= 0 && this.regions[ri].free >= size) {
+          const res = this.findFreeAndLargest(ri, size);
+          if (res.off >= 0) { off = res.off; hostReg = ri; }
+        }
+        if (off < 0 && this.cross) {
+          for (const i of this.crossOrder(this.regions.length, ri)) {
+            if (i === ri) continue;
+            const r = this.regions[i];
+            if ((r.caps & caps) !== caps) continue;
+            if (r.free < size) continue;
+            const res = this.findFreeAndLargest(i, size);
+            if (res.off < 0) { if (this.crossLargest) this.stats.crossSkip++; continue; }
+            off = res.off; hostReg = i; usedCross = true; break;
           }
+        }
+        if (off >= 0) {
+          if (!this.dInsert(off, size)) return null;
+          this.regions[hostReg].allocs++;
+          this.regAlloc(hostReg, size);
+          if (usedCross) this.stats.cross++;
+          this._bumpActive();
+          const id = ++this.idc;
+          this.map.set(id, { off, len: size, arena: 'dram', exec: false, region: hostReg, cross: usedCross });
+          this._idxAdd(id, 'dram', off); return id;
         }
         this.stats.failMem++; return null;
       }
@@ -1228,16 +560,21 @@
         if (a.arena === 'dram') {
           const idx = this.dFind(a.off);
           if (idx < 0) { this.stats.badFree++; return false; }
-          const len = this.dDesc[idx].len;
-          const ri = this.regByOff(a.off);
+          const len = this.dDesc[idx].len; const ri = this.regByOff(a.off);
           this.dDesc.splice(idx, 1);
           if (ri >= 0 && this.regions[ri].allocs > 0) this.regions[ri].allocs--;
           this.regRelease(ri, len);
         } else {
           const idx = this.iFind(a.off);
           if (idx < 0) { this.stats.badFree++; return false; }
-          const len = this.iDesc[idx].len;
-          this.iDesc.splice(idx, 1); this.iRelease(len);
+          const d = this.iDesc[idx]; const len = d.len; const wasExec = d.exec;
+          this.iDesc.splice(idx, 1);
+          if (wasExec) { this.iRelease(len); this.iFbAccountFree(a.off, len); }
+          else {
+            const ri = this.iFbRegByOff(a.off);
+            if (ri >= 0 && this.iramFbRegions[ri].allocs > 0) this.iramFbRegions[ri].allocs--;
+            this.iFbRegRelease(ri, len);
+          }
         }
         return true;
       }
@@ -1249,122 +586,97 @@
         if (a.arena === 'dram') {
           const idx = this.dFind(a.off);
           if (idx < 0) return null;
-          const oldLen = this.dDesc[idx].len;
-          const ri = this.regByOff(a.off);
+          const oldLen = this.dDesc[idx].len; const ri = this.regByOff(a.off);
+          if (ri < 0) { const nId = this.malloc(newSize, caps); if (nId === null) return null; this.free(id); return nId; }
           const capsOk = (this.regions[ri].caps & caps) === caps;
           const sizeOk = newSize >= this.regions[ri].min && (this.regions[ri].max === 0 || newSize <= this.regions[ri].max);
           if (capsOk && sizeOk) {
             if (newSize === oldLen) return id;
-            if (newSize < oldLen) {
-              const diff = oldLen - newSize;
-              this.dDesc[idx].len = newSize;
-              a.len = newSize;
-              this.regRelease(ri, diff);
-              return id;
-            }
-            const extra = newSize - oldLen;
-            const blockEnd = a.off + oldLen;
+            if (newSize < oldLen) { const diff = oldLen - newSize; this.dDesc[idx].len = newSize; a.len = newSize; this.regRelease(ri, diff); return id; }
+            const extra = newSize - oldLen; const blockEnd = a.off + oldLen;
             const regionEnd = this.regions[ri].start + this.regions[ri].total;
             let nextB = regionEnd;
-            if (idx + 1 < this.dDesc.length) {
-              const no = this.dDesc[idx + 1].off;
-              if (no < regionEnd) nextB = no;
-            }
-            if (nextB >= blockEnd && (nextB - blockEnd) >= extra) {
-              this.dDesc[idx].len = newSize;
-              a.len = newSize;
-              this.regAlloc(ri, extra);
-              return id;
-            }
+            if (idx + 1 < this.dDesc.length) { const no = this.dDesc[idx + 1].off; if (no < regionEnd) nextB = no; }
+            if (nextB >= blockEnd && (nextB - blockEnd) >= extra) { this.dDesc[idx].len = newSize; a.len = newSize; this.regAlloc(ri, extra); return id; }
           }
           const newId = this.malloc(newSize, caps);
           if (newId === null) return null;
-          this.free(id);
-          return newId;
+          this.free(id); return newId;
         }
         if (a.arena === 'iram') {
           const idx = this.iFind(a.off);
           if (idx < 0) return null;
-          const oldLen = this.iDesc[idx].len;
-          const oldExec = this.iDesc[idx].exec;
-          let wantExec = (caps & CAP_EXEC) !== 0;
-          if (oldExec) wantExec = true;
+          const oldLen = this.iDesc[idx].len; const oldExec = this.iDesc[idx].exec;
+          let wantExec = (caps & CAP_EXEC) !== 0; if (oldExec) wantExec = true;
           const inplaceOk = wantExec
             ? (oldExec && ((caps & ~(CAP_EXEC | CAP_32 | CAP_INT)) === 0))
-            : (!oldExec && this._capsAllowIramFb(caps));
+            : (!oldExec && this._capsAllowIramFb(caps) && (this.iramFbMax === 0 || newSize <= this.iramFbMax));
           if (inplaceOk) {
             if (newSize === oldLen) return id;
+            const ri = oldExec ? -1 : this.iFbRegByOff(a.off);
             if (newSize < oldLen) {
               const diff = oldLen - newSize;
               this.iDesc[idx].len = newSize; a.len = newSize;
-              this.iRelease(diff); return id;
+              if (oldExec) { this.iRelease(diff); this.iFbAccountFree(a.off + newSize, diff); }
+              else { this.iFbRegRelease(ri, diff); }
+              return id;
             }
             const extra = newSize - oldLen;
-            if (!oldExec && !this.iCanGrowFb(oldLen, newSize)) {
-              // Cannot grow in place, fall through to move
-            } else {
-              const blockEnd = a.off + oldLen;
+            let canGrow = false;
+            if (oldExec) {
+              const blockEnd = a.off + oldLen; let nextB = this.iramTotal;
+              if (idx + 1 < this.iDesc.length) nextB = this.iDesc[idx + 1].off;
+              if (nextB >= blockEnd && (nextB - blockEnd) >= extra) canGrow = true;
+            } else if (ri >= 0) {
+              const r = this.iramFbRegions[ri]; const blockEnd = a.off + oldLen;
               let nextB = this.iramTotal;
               if (idx + 1 < this.iDesc.length) nextB = this.iDesc[idx + 1].off;
-              if (nextB >= blockEnd && (nextB - blockEnd) >= extra) {
-                this.iDesc[idx].len = newSize; a.len = newSize;
-                this.iAlloc(extra); return id;
-              }
+              const regEnd = r.start + r.total;
+              if (nextB > regEnd) nextB = regEnd;
+              if (nextB >= blockEnd && (nextB - blockEnd) >= extra) canGrow = true;
+            }
+            if (canGrow) {
+              if (oldExec) { this.iDesc[idx].len = newSize; a.len = newSize; this.iAlloc(extra); this.iFbAccountAlloc(a.off + oldLen, extra); return id; }
+              else { this.iDesc[idx].len = newSize; a.len = newSize; this.iFbRegAlloc(ri, extra); return id; }
             }
           }
           const newId = this.malloc(newSize, caps | (oldExec ? CAP_EXEC : 0));
           if (newId === null) return null;
-          this.free(id);
-          return newId;
+          this.free(id); return newId;
         }
         return null;
       }
       getStatus() {
         let t = 0, f = 0, l = 0;
-        for (let i = 0; i < this.regions.length; i++) {
-          t += this.regions[i].total; f += this.regions[i].free;
-          const lr = this.regLargest(i); if (lr > l) l = lr;
-        }
-        if (this.iramOn) {
-          t += this.iramTotal; f += this.iramFree;
-          const il = this.iLargest(); if (il > l) l = il;
-        }
-        return {
-          total: t, free: f, minFree: this.stats.minFree, largest: l,
-          active: this.stats.active, maxActive: this.stats.maxActive,
-          exec: this.stats.exec, fb: this.stats.fb, cross: this.stats.cross,
-          failMem: this.stats.failMem, failTbl: this.stats.failTbl, badFree: this.stats.badFree
-        };
+        for (let i = 0; i < this.regions.length; i++) { t += this.regions[i].total; f += this.regions[i].free; const lr = this.regLargest(i); if (lr > l) l = lr; }
+        if (this.iramOn) { t += this.iramTotal; f += this.iramFree; const il = this.iLargest(); if (il > l) l = il; }
+        return { total: t, free: f, minFree: this.stats.minFree, largest: l, active: this.stats.active, maxActive: this.stats.maxActive, exec: this.stats.exec, iramFb: this.stats.iramFb, cross: this.stats.cross, crossSkip: this.stats.crossSkip, failMem: this.stats.failMem, failTbl: this.stats.failTbl, badFree: this.stats.badFree };
       }
       regLargest(ri) {
         if (ri >= this.regions.length) return 0;
-        const rs = this.regions[ri].start, re = rs + this.regions[ri].total;
+        const r = this.regions[ri]; const rs = r.start, re = rs + r.total;
         let cur = rs, lg = 0;
-        for (const d of this.dDesc) {
-          if (d.off + d.len <= rs) continue; if (d.off >= re) break;
-          if (d.off > cur && d.off - cur > lg) lg = d.off - cur;
-          if (d.off + d.len > cur) cur = d.off + d.len; if (cur >= re) break;
-        }
+        for (const d of this.dDesc) { if (d.off + d.len <= rs) continue; if (d.off >= re) break; if (d.off > cur && d.off - cur > lg) lg = d.off - cur; if (d.off + d.len > cur) cur = d.off + d.len; if (cur >= re) break; }
         if (re > cur && re - cur > lg) lg = re - cur; return lg;
+      }
+      iFbRegLargest(ri) {
+        if (ri >= this.iramFbRegions.length) return 0;
+        const r = this.iramFbRegions[ri]; const rs = r.start, re = rs + r.total;
+        let cand = re, lg = 0;
+        for (let i = this.iDesc.length - 1; i >= 0; i--) { const d = this.iDesc[i], be = d.off + d.len; if (be <= rs) break; if (d.off >= re) continue; if (cand > be && cand - be > lg) lg = cand - be; if (d.off < cand) cand = d.off; if (cand <= rs) break; }
+        if (cand > rs && cand - rs > lg) lg = cand - rs; return lg;
       }
       iLargest() {
         if (!this.iramOn) return 0;
         let cur = 0, lg = 0;
-        for (const d of this.iDesc) {
-          if (d.off > cur && d.off - cur > lg) lg = d.off - cur;
-          if (d.off + d.len > cur) cur = d.off + d.len;
-        }
-        if (this.iramTotal > cur && this.iramTotal - cur > lg) lg = this.iramTotal - cur;
-        return lg;
+        for (const d of this.iDesc) { if (d.off > cur && d.off - cur > lg) lg = d.off - cur; if (d.off + d.len > cur) cur = d.off + d.len; }
+        if (this.iramTotal > cur && this.iramTotal - cur > lg) lg = this.iramTotal - cur; return lg;
       }
     }
 
     let alc = new MxR(), selId = null, lastAct = { type: null, off: null, arena: null };
     let autoRun = false, autoTmr = null, autoStep = 0, autoM = 0, autoF = 0, autoFail = 0, reTmr = null;
-
-    // UX: track previous free for pulse optimization
     let prevFreeValue = -1;
-    // UX: requestAnimationFrame throttle for auto-mode rendering
     let renderPending = false;
 
     function addLog(m, t = 'info') {
@@ -1385,69 +697,85 @@
       if (reTmr) clearTimeout(reTmr);
       reTmr = setTimeout(() => initAlloc(true), 600);
     }
-    function setLocked(v) {
-      ['regionConfig', 'dramSize', 'maxDesc', 'useIram', 'iramSize', 'iramReserve', 'iramFallbackMax', 'maxIramDesc', 'crossRegion']
-        .forEach(id => { const e = document.getElementById(id); if (e) e.disabled = v; });
+
+    // ИСПРАВЛЕНО: управление зависимостями чекбоксов и IRAM-настроек
+    function refreshControlStates() {
+      const locked = autoRun;
+      const iramEnabled = document.getElementById('useIram').checked;
+      const crossEnabled = document.getElementById('crossRegion').checked;
+
+      // IRAM settings visibility & state
+      const iramSettings = document.getElementById('iramSettings');
+      const iramInputIds = ['iramSize', 'iramReserve', 'iramFallbackMax', 'iramFbRegions', 'maxIramDesc'];
+      if (iramEnabled) {
+        iramSettings.style.display = 'block';
+      } else {
+        iramSettings.style.display = 'none';
+      }
+      iramInputIds.forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.disabled = locked || !iramEnabled;
+      });
+
+      // Cross-region check largest depends on crossRegion
+      const cl = document.getElementById('crossLargest');
+      if (!crossEnabled) cl.checked = false;
+      cl.disabled = locked || !crossEnabled;
+
+      // Main controls
+      ['regionConfig', 'dramSize', 'maxDesc', 'useIram', 'crossRegion'].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.disabled = locked;
+      });
     }
+
+    function setLocked(v) {
+      autoRun = v;
+      refreshControlStates();
+    }
+
     function initAlloc(silent = false) {
       stopAuto();
       const c = {
         regionConfig: document.getElementById('regionConfig').value,
-        dramSize: +document.getElementById('dramSize').value || 81920,
-        maxDesc: +document.getElementById('maxDesc').value || 256,
+        dramSize: numOr('dramSize', 81920),
+        maxDesc: numOr('maxDesc', 256),
         useIram: document.getElementById('useIram').checked,
-        iramSize: +document.getElementById('iramSize').value || 7472,
-        iramReserve: +document.getElementById('iramReserve').value || 2048,
-        iramFallbackMax: +document.getElementById('iramFallbackMax').value || 0,
-        maxIramDesc: +document.getElementById('maxIramDesc').value || 128,
-        crossRegion: document.getElementById('crossRegion').checked
+        iramSize: numOr('iramSize', 7472),
+        iramReserve: numOr('iramReserve', 2048),
+        iramFallbackMax: numOr('iramFallbackMax', 0),
+        iramFbRegions: document.getElementById('iramFbRegions').value || '4-0%',
+        maxIramDesc: numOr('maxIramDesc', 128),
+        crossRegion: document.getElementById('crossRegion').checked,
+        crossLargest: document.getElementById('crossLargest').checked
       };
       alc = new MxR(); selId = null; lastAct = { type: null, off: null, arena: null };
       prevFreeValue = -1;
       if (alc.init(c)) {
         if (!silent) addLog('✅ Allocator initialized', 'success');
-        else {
-          addLog('⚙️ Settings applied', 'info');
-          const b = document.getElementById('reinitBadge');
-          b.classList.add('visible'); setTimeout(() => b.classList.remove('visible'), 1500);
-        }
+        else { addLog('⚙️ Settings applied', 'info'); const b = document.getElementById('reinitBadge'); b.classList.add('visible'); setTimeout(() => b.classList.remove('visible'), 1500); }
       } else addLog('❌ Init failed', 'error');
+      refreshControlStates();
       render();
     }
-
-    function updateFreeBtn() {
-      document.getElementById('btnFree').disabled = selId === null;
-    }
-
+    function updateFreeBtn() { document.getElementById('btnFree').disabled = selId === null; }
     function doMalloc() {
       const size = +document.getElementById('allocSize').value || 64;
       const caps = +document.getElementById('allocCaps').value;
       const id = alc.malloc(size, caps);
-      if (id !== null) {
-        const a = alc.map.get(id);
-        lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc');
-        addLog(`✅ malloc(${size},0x${caps.toString(16)}) → id=${id},${a.arena},off=${a.off}`, 'success');
-      } else addLog(`❌ malloc(${size}) FAILED`, 'error');
+      if (id !== null) { const a = alc.map.get(id); lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc'); addLog(`✅ malloc(${size},0x${caps.toString(16)}) → id=${id},${a.arena},off=${a.off}`, 'success'); }
+      else addLog(`❌ malloc(${size}) FAILED`, 'error');
       render();
     }
     function doFree() {
       if (selId === null) { addLog('⚠️ Select a block first', 'info'); return; }
-      if (!alc.map.has(selId)) {
-        addLog(`⚠️ id=${selId} already freed, deselecting`, 'info');
-        selId = null; updateFreeBtn(); render(); return;
-      }
+      if (!alc.map.has(selId)) { addLog(`⚠️ id=${selId} already freed, deselecting`, 'info'); selId = null; updateFreeBtn(); render(); return; }
       const a = alc.map.get(selId);
-      if (alc.free(selId)) {
-        lastAct = { type: 'free', off: a.off, arena: a.arena }; flash('free');
-        addLog(`🗑️ free(id=${selId}) → ${a.len}B`, 'success');
-      } else addLog(`❌ free(id=${selId}) FAILED`, 'error');
+      if (alc.free(selId)) { lastAct = { type: 'free', off: a.off, arena: a.arena }; flash('free'); addLog(`🗑️ free(id=${selId}) → ${a.len}B`, 'success'); }
+      else addLog(`❌ free(id=${selId}) FAILED`, 'error');
       selId = null; updateFreeBtn(); render();
     }
-    function doFreeAll() {
-      const ids = [...alc.map.keys()]; let c = 0;
-      for (const id of ids) if (alc.free(id)) c++;
-      addLog(`🧹 Freed ${c} blocks`, 'info'); selId = null; updateFreeBtn(); render();
-    }
+    function doFreeAll() { const ids = [...alc.map.keys()]; let c = 0; for (const id of ids) if (alc.free(id)) c++; addLog(`🧹 Freed ${c} blocks`, 'info'); selId = null; updateFreeBtn(); render(); }
     function doRandomAlloc() {
       const sizes = [4, 8, 16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048, 4096];
       const size = sizes[Math.floor(Math.random() * sizes.length)];
@@ -1455,38 +783,19 @@
       document.getElementById('allocSize').value = size;
       document.getElementById('allocCaps').value = caps;
       const id = alc.malloc(size, caps);
-      if (id !== null) {
-        const a = alc.map.get(id);
-        lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc');
-        addLog(`🎲 malloc(${size}) → id=${id},${a.arena}`, 'success');
-      } else addLog(`🎲 malloc(${size}) FAILED`, 'error');
+      if (id !== null) { const a = alc.map.get(id); lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc'); addLog(`🎲 malloc(${size}) → id=${id},${a.arena}`, 'success'); }
+      else addLog(`🎲 malloc(${size}) FAILED`, 'error');
       render();
     }
     function doStress(mn, mx, c) {
       let ok = 0, fail = 0;
-      for (let i = 0; i < c; i++) {
-        const s = al4(mn + Math.floor(Math.random() * (mx - mn)));
-        const id = alc.malloc(s, CAP_32);
-        if (id !== null) {
-          const a = alc.map.get(id);
-          lastAct = { type: 'malloc', off: a.off, arena: a.arena }; ok++;
-        }
-        else fail++;
-      }
+      for (let i = 0; i < c; i++) { const s = al4(mn + Math.floor(Math.random() * (mx - mn))); const id = alc.malloc(s, CAP_32); if (id !== null) { const a = alc.map.get(id); lastAct = { type: 'malloc', off: a.off, arena: a.arena }; ok++; } else fail++; }
       flash('malloc'); addLog(`📦 Stress: ${ok} ok, ${fail} fail (${mn}-${mx})`, 'info'); render();
     }
     function doStressExec() {
       if (!alc.iramOn) { addLog('⚠️ IRAM disabled', 'error'); return; }
       let ok = 0, fail = 0;
-      for (let i = 0; i < 5; i++) {
-        const s = al4(16 + Math.floor(Math.random() * 128));
-        const id = alc.malloc(s, CAP_EXEC);
-        if (id !== null) {
-          const a = alc.map.get(id);
-          lastAct = { type: 'malloc', off: a.off, arena: a.arena }; ok++;
-        }
-        else fail++;
-      }
+      for (let i = 0; i < 5; i++) { const s = al4(16 + Math.floor(Math.random() * 128)); const id = alc.malloc(s, CAP_EXEC); if (id !== null) { const a = alc.map.get(id); lastAct = { type: 'malloc', off: a.off, arena: a.arena }; ok++; } else fail++; }
       flash('malloc'); addLog(`⚡ EXEC stress: ${ok} ok, ${fail} fail`, 'info'); render();
     }
     function doRealloc() {
@@ -1499,13 +808,9 @@
       if (newId === null) { addLog(`❌ realloc(${newSize}) FAILED`, 'error'); }
       else if (newId === -1) { addLog(`🗑️ realloc(0) → freed id=${selId}`, 'success'); selId = null; }
       else if (newId === selId) { addLog(`✅ realloc(${newSize}) → in-place id=${selId}`, 'success'); }
-      else {
-        addLog(`✅ realloc(${newSize}) → moved ${selId}→${newId} (was ${old.arena} off=${old.off})`, 'success');
-        selId = newId; lastAct = { type: 'malloc', off: alc.map.get(newId).off, arena: alc.map.get(newId).arena }; flash('malloc');
-      }
+      else { addLog(`✅ realloc(${newSize}) → moved ${selId}→${newId} (was ${old.arena} off=${old.off})`, 'success'); selId = newId; lastAct = { type: 'malloc', off: alc.map.get(newId).off, arena: alc.map.get(newId).arena }; flash('malloc'); }
       updateFreeBtn(); render();
     }
-
     function toggleAuto() { if (autoRun) pauseAuto(); else startAuto(); }
     function startAuto() {
       if (!alc.ok) initAlloc();
@@ -1526,18 +831,9 @@
       if (autoTmr) { clearInterval(autoTmr); autoTmr = null; }
       setLocked(false); addLog('⏸ Auto paused', 'auto');
     }
-    function stopAuto() {
-      pauseAuto(); autoStep = 0; autoM = 0; autoF = 0; autoFail = 0;
-      updateAutoStatus();
-      document.getElementById('autoProgress').style.width = '0%';
-    }
+    function stopAuto() { pauseAuto(); autoStep = 0; autoM = 0; autoF = 0; autoFail = 0; updateAutoStatus(); document.getElementById('autoProgress').style.width = '0%'; }
     function onSpeedChange() {
-      if (autoRun && autoTmr) {
-        clearInterval(autoTmr);
-        const sp = Math.max(50, +document.getElementById('autoSpeed').value || 1000);
-        autoTmr = setInterval(autoStepFn, sp);
-        addLog(`🤖 Speed → ${sp}ms`, 'auto');
-      }
+      if (autoRun && autoTmr) { clearInterval(autoTmr); const sp = Math.max(50, +document.getElementById('autoSpeed').value || 1000); autoTmr = setInterval(autoStepFn, sp); addLog(`🤖 Speed → ${sp}ms`, 'auto'); }
     }
     function autoStepFn() {
       autoStep++;
@@ -1551,69 +847,37 @@
         const ids = [...alc.map.keys()];
         const id = ids[Math.floor(Math.random() * ids.length)];
         const a = alc.map.get(id);
-        if (alc.free(id)) {
-          lastAct = { type: 'free', off: a.off, arena: a.arena };
-          flash('free'); autoF++;
-          addLog(`🤖 free(id=${id}) → ${a.arena},${a.len}B`, 'auto');
-        }
+        if (alc.free(id)) { lastAct = { type: 'free', off: a.off, arena: a.arena }; flash('free'); autoF++; addLog(`🤖 free(id=${id}) → ${a.arena},${a.len}B`, 'auto'); }
       } else {
         let size, caps;
         switch (sc) {
-          case 'random': size = al4(4 + Math.floor(Math.random() * 4096));
-            caps = [2, 2, 2, 6, 14, 0][Math.floor(Math.random() * 6)]; break;
-          case 'wifi': {
-            const r = Math.random();
-            if (r < 0.6) { size = al4(32 + Math.floor(Math.random() * 96)); caps = 14; }
-            else if (r < 0.88) { size = al4(128 + Math.floor(Math.random() * 512)); caps = 6; }
-            else { size = al4(1500 + Math.floor(Math.random() * 1500)); caps = 2; }
-            break;
-          }
+          case 'random': size = al4(4 + Math.floor(Math.random() * 4096)); caps = [2, 2, 2, 6, 14, 0][Math.floor(Math.random() * 6)]; break;
+          case 'wifi': { const r = Math.random(); if (r < 0.6) { size = al4(32 + Math.floor(Math.random() * 96)); caps = 14; } else if (r < 0.88) { size = al4(128 + Math.floor(Math.random() * 512)); caps = 6; } else { size = al4(1500 + Math.floor(Math.random() * 1500)); caps = 2; } break; }
           case 'stress': size = al4(4 + Math.floor(Math.random() * 8192)); caps = 2; break;
-          case 'fragment':
-            if (autoStep % 2 === 0) { size = al4(4 + Math.floor(Math.random() * 32)); caps = 14; }
-            else { size = al4(256 + Math.floor(Math.random() * 2048)); caps = 2; } break;
+          case 'fragment': if (autoStep % 2 === 0) { size = al4(4 + Math.floor(Math.random() * 32)); caps = 14; } else { size = al4(256 + Math.floor(Math.random() * 2048)); caps = 2; } break;
           case 'exec': size = al4(16 + Math.floor(Math.random() * 256)); caps = CAP_EXEC; break;
-          case 'mixed': {
-            const r = Math.random();
-            if (r < 0.15) { size = al4(16 + Math.floor(Math.random() * 128)); caps = CAP_EXEC; }
-            else if (r < 0.5) { size = al4(4 + Math.floor(Math.random() * 64)); caps = 14; }
-            else if (r < 0.8) { size = al4(64 + Math.floor(Math.random() * 512)); caps = 2; }
-            else { size = al4(512 + Math.floor(Math.random() * 4096)); caps = 6; } break;
-          }
+          case 'mixed': { const r = Math.random(); if (r < 0.15) { size = al4(16 + Math.floor(Math.random() * 128)); caps = CAP_EXEC; } else if (r < 0.5) { size = al4(4 + Math.floor(Math.random() * 64)); caps = 14; } else if (r < 0.8) { size = al4(64 + Math.floor(Math.random() * 512)); caps = 2; } else { size = al4(512 + Math.floor(Math.random() * 4096)); caps = 6; } break; }
           default: size = al4(4 + Math.floor(Math.random() * 4096)); caps = 2;
         }
         const id = alc.malloc(size, caps);
-        if (id !== null) {
-          const a = alc.map.get(id);
-          lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc'); autoM++;
-          addLog(`🤖 malloc(${size},${caps === 1 ? 'EXEC' : '0x' + caps.toString(16)}) → id=${id},${a.arena}`, 'auto');
-        } else {
-          autoFail++;
-          addLog(`🤖 malloc(${size}) FAILED`, 'error');
-        }
+        if (id !== null) { const a = alc.map.get(id); lastAct = { type: 'malloc', off: a.off, arena: a.arena }; flash('malloc'); autoM++; addLog(`🤖 malloc(${size},${caps === 1 ? 'EXEC' : '0x' + caps.toString(16)}) → id=${id},${a.arena}`, 'auto'); }
+        else { autoFail++; addLog(`🤖 malloc(${size}) FAILED`, 'error'); }
       }
       updateAutoStatus();
-      // UX: throttle render to animation frame in auto-mode
       scheduleRender();
     }
     function scheduleRender() {
       if (renderPending) return;
       renderPending = true;
-      requestAnimationFrame(() => {
-        render();
-        renderPending = false;
-      });
+      requestAnimationFrame(() => { render(); renderPending = false; });
     }
     function updateAutoStatus() {
       document.getElementById('autoStepCount').textContent = `Step: ${autoStep}`;
       document.getElementById('autoAllocCount').textContent = `M:${autoM} F:${autoF} Err:${autoFail}`;
       const mb = Math.max(1, +document.getElementById('autoMaxBlocks').value || 120);
-      document.getElementById('autoProgress').style.width =
-        Math.min(100, (alc.map.size / mb) * 100) + '%';
+      document.getElementById('autoProgress').style.width = Math.min(100, (alc.map.size / mb) * 100) + '%';
     }
-
     function render() { renderStats(); renderMemory(); renderDescTable(); renderRegionTable(); updateFreeBtn(); }
-
     function renderStats() {
       const st = alc.getStatus();
       document.getElementById('stTotal').textContent = fb(st.total);
@@ -1621,32 +885,29 @@
       document.getElementById('stMinFree').textContent = fb(st.minFree);
       document.getElementById('stLargest').textContent = fb(st.largest);
       document.getElementById('stActive').textContent = st.active;
-
-      // UX: Failed = failMem + failTbl + badFree, with tooltip breakdown
+      document.getElementById('stExec').textContent = st.exec;
+      document.getElementById('stIramFb').textContent = st.iramFb;
+      document.getElementById('stCross').textContent = st.cross;
+      document.getElementById('stCrossSkip').textContent = st.crossSkip;
+      document.getElementById('stMaxActive').textContent = st.maxActive;
+      const dDescN = alc.dDesc.length + alc.iDesc.length;
+      const dDescMax = alc.maxDesc + alc.maxIDesc;
+      document.getElementById('stDesc').textContent = dDescN + '/' + dDescMax;
       const totalFailed = st.failMem + st.failTbl + st.badFree;
       document.getElementById('stFailed').textContent = totalFailed;
-      document.getElementById('stFailedCard').title =
-        `No memory: ${st.failMem}\nTable full: ${st.failTbl}\nBad free: ${st.badFree}\n\nAlloc types:\n  EXEC: ${st.exec}\n  IRAM FB: ${st.fb}\n  Cross-region: ${st.cross}`;
-
-      // UX: pulse only when free value actually changes
+      document.getElementById('stFailedCard').title = `No memory: ${st.failMem}\nTable full: ${st.failTbl}\nBad free: ${st.badFree}\n\nAlloc types:\n  EXEC: ${st.exec}\n  IRAM fb: ${st.iramFb}\n  Cross-region: ${st.cross}\n  Cross skip: ${st.crossSkip}`;
       const fc = document.getElementById('stFreeCard');
-      if (st.free !== prevFreeValue) {
-        fc.classList.remove('pulse'); void fc.offsetWidth; fc.classList.add('pulse');
-        prevFreeValue = st.free;
-      }
+      if (st.free !== prevFreeValue) { fc.classList.remove('pulse'); void fc.offsetWidth; fc.classList.add('pulse'); prevFreeValue = st.free; }
     }
-
     function blockColor(seg) {
       if (seg.type === 'free') return null;
       if (seg.type === 'exec') return `linear-gradient(180deg,${EXEC_COLOR},${EXEC_COLOR_D})`;
       if (seg.type === 'fallback') return `linear-gradient(180deg,${FALLBACK_COLOR},${FALLBACK_COLOR_D})`;
       if (seg.type === 'cross') return `linear-gradient(180deg,${CROSS_COLOR},${CROSS_COLOR_D})`;
-      const ri = seg.regionIdx;
-      const total = alc.regions.length;
+      const ri = seg.regionIdx; const total = alc.regions.length;
       if (ri < 0 || ri >= total) return `linear-gradient(180deg,#94a3b8,#64748b)`;
       return `linear-gradient(180deg,${regionColor(ri, total)},${regionColorDark(ri, total)})`;
     }
-
     function renderMemory() {
       const dBar = document.getElementById('dramBar');
       const dMark = document.getElementById('dramMarkers');
@@ -1659,64 +920,60 @@
         const alloc = id != null ? alc.map.get(id) : null;
         const ri = alc.regByOff(d.off);
         const tp = alloc && alloc.cross ? 'cross' : 'region';
-        segs.push({
-          start: d.off, end: d.off + d.len, type: tp,
-          id: id, len: d.len, regionIdx: ri
-        });
+        segs.push({ start: d.off, end: d.off + d.len, type: tp, id: id, len: d.len, regionIdx: ri });
       }
       let cur = 0; const all = [];
-      for (const s of segs) {
-        if (s.start > cur) all.push({ start: cur, end: s.start, type: 'free', len: s.start - cur });
-        all.push(s); cur = s.end;
-      }
+      for (const s of segs) { if (s.start > cur) all.push({ start: cur, end: s.start, type: 'free', len: s.start - cur }); all.push(s); cur = s.end; }
       if (cur < dTotal) all.push({ start: cur, end: dTotal, type: 'free', len: dTotal - cur });
       for (const s of all) {
         const div = document.createElement('div');
         div.className = 'mem-blk' + (s.type === 'free' ? ' free' : '');
         div.style.width = Math.max(0.3, (s.len / dTotal) * 100) + '%';
-        const bg = blockColor(s);
-        if (bg) div.style.background = bg;
+        const bg = blockColor(s); if (bg) div.style.background = bg;
         if (s.type !== 'free' && s.len / dTotal > 0.04) div.textContent = s.len;
-        if (s.id != null) {
-          div.onclick = () => { selId = s.id; render(); };
-          if (s.id === selId) div.classList.add('selected');
-        }
-        if (lastAct.type === 'malloc' && s.start === lastAct.off && s.type !== 'free' && lastAct.arena === 'dram')
-          div.classList.add('appear', 'flash');
-        div.onmouseenter = e => showTip(e, s);
-        div.onmouseleave = hideTip;
+        if (s.id != null) { div.onclick = () => { selId = s.id; render(); }; if (s.id === selId) div.classList.add('selected'); }
+        if (lastAct.type === 'malloc' && s.start === lastAct.off && s.type !== 'free' && lastAct.arena === 'dram') div.classList.add('appear', 'flash');
+        div.onmouseenter = e => showTip(e, s); div.onmouseleave = hideTip;
         dBar.appendChild(div);
       }
       const rc = alc.regions.length;
-      for (let i = 0; i < rc; i++) {
-        const r = alc.regions[i];
-        const div = document.createElement('div');
-        div.className = 'region-marker';
-        div.style.width = (r.total / dTotal) * 100 + '%';
-        div.style.background = regionColor(i, rc);
-        dMark.appendChild(div);
-      }
+      for (let i = 0; i < rc; i++) { const r = alc.regions[i]; const div = document.createElement('div'); div.className = 'region-marker'; div.style.width = (r.total / dTotal) * 100 + '%'; div.style.background = regionColor(i, rc); dMark.appendChild(div); }
       const dFree = alc.regions.reduce((s, r) => s + r.free, 0);
-      document.getElementById('dramInfo').textContent =
-        `total:${fb(dTotal)} free:${fb(dFree)} desc:${alc.dDesc.length}/${alc.maxDesc}`;
+      document.getElementById('dramInfo').textContent = `total:${fb(dTotal)} free:${fb(dFree)} desc:${alc.dDesc.length}/${alc.maxDesc}`;
       const iSec = document.getElementById('iramSec');
-      if (!alc.iramOn) { iSec.style.display = 'none'; } else {
+      const iMark = document.getElementById('iramMarkers');
+      if (!alc.iramOn) { iSec.style.display = 'none'; }
+      else {
         iSec.style.display = 'block';
         const iBar = document.getElementById('iramBar'); iBar.innerHTML = '';
+        iMark.innerHTML = '';
         const iTotal = alc.iramTotal;
+        // ИСПРАВЛЕНО: iram-zoned только при reserve > 0
+        const resPct = iTotal > 0 ? (alc.iramRes / iTotal) * 100 : 0;
+        if (alc.iramRes > 0) {
+          iBar.classList.add('iram-zoned');
+          iBar.style.setProperty('--reserve-pct', resPct + '%');
+          if (alc.iramRes < iTotal) {
+            const rl = document.createElement('div');
+            rl.className = 'reserve-line'; rl.style.left = resPct + '%';
+            iBar.appendChild(rl);
+            const tag = document.createElement('div');
+            tag.className = 'reserve-tag'; tag.style.left = resPct + '%';
+            tag.textContent = 'res ' + fb(alc.iramRes);
+            iBar.appendChild(tag);
+          }
+        } else {
+          iBar.classList.remove('iram-zoned');
+        }
         const iSegs = [];
         for (const d of alc.iDesc) {
           const id = alc._idxGet('iram', d.off);
-          iSegs.push({
-            start: d.off, end: d.off + d.len,
-            type: d.exec ? 'exec' : 'fallback', id: id, len: d.len, exec: d.exec
-          });
+          const alloc = id != null ? alc.map.get(id) : null;
+          const isCross = alloc && alloc.cross;
+          iSegs.push({ start: d.off, end: d.off + d.len, type: d.exec ? 'exec' : (isCross ? 'cross' : 'fallback'), id: id, len: d.len, exec: d.exec, regionIdx: alloc ? alloc.region : -1 });
         }
         let ic = 0; const iAll = [];
-        for (const s of iSegs) {
-          if (s.start > ic) iAll.push({ start: ic, end: s.start, type: 'free', len: s.start - ic });
-          iAll.push(s); ic = s.end;
-        }
+        for (const s of iSegs) { if (s.start > ic) iAll.push({ start: ic, end: s.start, type: 'free', len: s.start - ic }); iAll.push(s); ic = s.end; }
         if (ic < iTotal) iAll.push({ start: ic, end: iTotal, type: 'free', len: iTotal - ic });
         for (const s of iAll) {
           const div = document.createElement('div');
@@ -1724,41 +981,56 @@
           div.style.width = Math.max(0.3, (s.len / iTotal) * 100) + '%';
           const bg = blockColor(s); if (bg) div.style.background = bg;
           if (s.type !== 'free' && s.len / iTotal > 0.04) div.textContent = s.len;
-          if (s.id != null) {
-            div.onclick = () => { selId = s.id; render(); };
-            if (s.id === selId) div.classList.add('selected');
-          }
-          if (lastAct.type === 'malloc' && s.start === lastAct.off && s.type !== 'free' && lastAct.arena === 'iram')
-            div.classList.add('appear', 'flash');
-          div.onmouseenter = e => showTip(e, s);
-          div.onmouseleave = hideTip;
+          if (s.id != null) { div.onclick = () => { selId = s.id; render(); }; if (s.id === selId) div.classList.add('selected'); }
+          if (lastAct.type === 'malloc' && s.start === lastAct.off && s.type !== 'free' && lastAct.arena === 'iram') div.classList.add('appear', 'flash');
+          div.onmouseenter = e => showTip(e, s); div.onmouseleave = hideTip;
           iBar.appendChild(div);
         }
-        document.getElementById('iramInfo').textContent =
-          `total:${fb(iTotal)} free:${fb(alc.iramFree)} res:${fb(alc.iramRes)} fbMax:${alc.iramFbMax || '∞'} desc:${alc.iDesc.length}/${alc.maxIDesc}`;
+        // ИСПРАВЛЕНО: EXEC marker только при reserve > 0
+        if (alc.iramRes > 0) {
+          const ez = document.createElement('div');
+          ez.className = 'iram-marker exec-zone';
+          ez.style.width = (alc.iramRes / iTotal) * 100 + '%';
+          ez.title = 'EXEC zone [0, ' + fb(alc.iramRes) + ')';
+          iMark.appendChild(ez);
+        }
+        const frc = alc.iramFbRegions.length;
+        const fbSpan = iTotal - alc.iramRes;
+        for (let i = 0; i < frc; i++) {
+          const r = alc.iramFbRegions[i];
+          const div = document.createElement('div');
+          div.className = 'iram-marker';
+          div.style.width = (fbSpan > 0 ? (r.total / fbSpan) * 100 : 0) + '%';
+          div.style.background = regionColor(i, Math.max(frc, 1));
+          div.title = 'IRAM fb R' + i + ' [' + r.min + ',' + (r.max === 0 ? '∞' : r.max) + ']';
+          iMark.appendChild(div);
+        }
+        const fbZoneTotal = iTotal - alc.iramRes;
+        document.getElementById('iramInfo').textContent = `total:${fb(iTotal)} free:${fb(alc.iramFree)} exec_zone:${fb(alc.iramRes)} fb_zone:${fb(fbZoneTotal)} fb_regions:${frc} fbMax:${alc.iramFbMax || '∞'} desc:${alc.iDesc.length}/${alc.maxIDesc}`;
       }
       const leg = document.getElementById('legend');
       leg.innerHTML = '';
       const rc2 = alc.regions.length;
+      leg.innerHTML += '<div class="legend-item" style="font-weight:800;color:#4f6ef7">DRAM</div>';
       for (let i = 0; i < rc2; i++) {
-        const r = alc.regions[i];
-        const maxStr = r.max === 0 ? '∞' : r.max;
-        leg.innerHTML += `<div class="legend-item">
-      <div class="legend-dot" style="background:${regionColor(i, rc2)}"></div>
-      R${i} (${r.min}–${maxStr})</div>`;
+        const r = alc.regions[i]; const maxStr = r.max === 0 ? '∞' : r.max;
+        leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${regionColor(i, rc2)}"></div>R${i} (${r.min}–${maxStr})</div>`;
       }
       if (alc.iramOn) {
-        leg.innerHTML += `<div class="legend-item">
-      <div class="legend-dot" style="background:${EXEC_COLOR}"></div>EXEC</div>`;
-        leg.innerHTML += `<div class="legend-item">
-      <div class="legend-dot" style="background:${FALLBACK_COLOR}"></div>Fallback</div>`;
+        leg.innerHTML += '<div class="legend-item" style="font-weight:800;color:#8b5cf6">IRAM</div>';
+        leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:repeating-linear-gradient(45deg,#f97316,#f97316 3px,#fb923c 3px,#fb923c 6px)"></div>EXEC zone</div>`;
+        const frc2 = alc.iramFbRegions.length;
+        for (let i = 0; i < frc2; i++) {
+          const r = alc.iramFbRegions[i]; const maxStr = r.max === 0 ? '∞' : r.max;
+          leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${regionColor(i, Math.max(frc2, 1))}"></div>fb R${i} (${r.min}–${maxStr})</div>`;
+        }
+        leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${EXEC_COLOR}"></div>EXEC block</div>`;
+        leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${FALLBACK_COLOR}"></div>FB block</div>`;
       }
       if (alc.cross) {
-        leg.innerHTML += `<div class="legend-item">
-      <div class="legend-dot" style="background:${CROSS_COLOR}"></div>Cross</div>`;
+        leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${CROSS_COLOR}"></div>Cross</div>`;
       }
     }
-
     function renderDescTable() {
       const tb = document.getElementById('descTable'); tb.innerHTML = '';
       let idx = 0;
@@ -1768,14 +1040,10 @@
         const a = id != null ? alc.map.get(id) : null;
         const ri = alc.regByOff(d.off);
         const tr = document.createElement('tr');
-        if (lastAct.type === 'malloc' && d.off === lastAct.off && lastAct.arena === 'dram')
-          tr.classList.add('new-row');
+        if (lastAct.type === 'malloc' && d.off === lastAct.off && lastAct.arena === 'dram') tr.classList.add('new-row');
         const riLabel = ri < 0 ? '?' : `R${ri}`;
         const riColor = ri < 0 ? '#94a3b8' : regionColor(ri, rc);
-        tr.innerHTML = `<td>${idx++}</td><td style="color:#4f6ef7;font-weight:700">DRAM</td>
-      <td>${d.off}</td><td>${d.len}</td><td>—</td>
-      <td style="color:${riColor};font-weight:700">${riLabel}</td>
-      <td><button class="btn btn-r btn-sm" onclick="freeByOff(${d.off},'dram')">✕</button></td>`;
+        tr.innerHTML = `<td>${idx++}</td><td style="color:#4f6ef7;font-weight:700">DRAM</td><td>${d.off}</td><td>${d.len}</td><td>—</td><td style="color:${riColor};font-weight:700">${riLabel}</td><td><button class="btn btn-r btn-sm" onclick="freeByOff(${d.off},'dram')">✕</button></td>`;
         if (a && id === selId) tr.style.background = '#eef2ff';
         tb.appendChild(tr);
       }
@@ -1783,36 +1051,49 @@
         const id = alc._idxGet('iram', d.off);
         const a = id != null ? alc.map.get(id) : null;
         const tr = document.createElement('tr');
-        if (lastAct.type === 'malloc' && d.off === lastAct.off && lastAct.arena === 'iram')
-          tr.classList.add('new-row');
-        tr.innerHTML = `<td>${idx++}</td>
-      <td style="color:#8b5cf6;font-weight:700">IRAM</td>
-      <td>${d.off}</td><td>${d.len}</td><td>${d.exec ? '✓' : '—'}</td><td>—</td>
-      <td><button class="btn btn-r btn-sm" onclick="freeByOff(${d.off},'iram')">✕</button></td>`;
+        if (lastAct.type === 'malloc' && d.off === lastAct.off && lastAct.arena === 'iram') tr.classList.add('new-row');
+        let regLabel = '—', regColor = '#94a3b8';
+        if (d.exec) { regLabel = 'EXEC'; regColor = EXEC_COLOR; }
+        else if (a && a.region >= 0) { const frc = alc.iramFbRegions.length; regLabel = (a.cross ? '↗' : '') + 'fb R' + a.region; regColor = regionColor(a.region, Math.max(frc, 1)); }
+        tr.innerHTML = `<td>${idx++}</td><td style="color:#8b5cf6;font-weight:700">IRAM</td><td>${d.off}</td><td>${d.len}</td><td>${d.exec ? '✓' : '—'}</td><td style="color:${regColor};font-weight:700">${regLabel}</td><td><button class="btn btn-r btn-sm" onclick="freeByOff(${d.off},'iram')">✕</button></td>`;
         if (a && id === selId) tr.style.background = '#f5f3ff';
         tb.appendChild(tr);
       }
     }
-    function freeByOff(off, arena) {
-      const id = alc._idxGet(arena, off);
-      if (id == null) return;
-      selId = id; doFree();
-    }
+    function freeByOff(off, arena) { const id = alc._idxGet(arena, off); if (id == null) return; selId = id; doFree(); }
     function renderRegionTable() {
       const tb = document.getElementById('regionTable'); tb.innerHTML = '';
       const rc = alc.regions.length;
+      const hdr1 = document.createElement('tr');
+      hdr1.className = 'region-section-row';
+      hdr1.innerHTML = '<td colspan="8">DRAM regions</td>';
+      tb.appendChild(hdr1);
       for (let i = 0; i < rc; i++) {
-        const r = alc.regions[i];
-        const lg = alc.regLargest(i);
+        const r = alc.regions[i]; const lg = alc.regLargest(i);
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td style="color:${regionColor(i, rc)};font-weight:800">R${i}</td>
-      <td>${r.min}</td><td>${r.max === 0 ? '∞' : r.max}</td>
-      <td>${fb(r.total)}</td><td>${fb(r.free)}</td><td>${fb(r.minFree)}</td>
-      <td>${fb(lg)}</td><td>${r.allocs}</td>`;
+        tr.innerHTML = `<td style="color:${regionColor(i, rc)};font-weight:800">R${i}</td><td>${r.min}</td><td>${r.max === 0 ? '∞' : r.max}</td><td>${fb(r.total)}</td><td>${fb(r.free)}</td><td>${fb(r.minFree)}</td><td>${fb(lg)}</td><td>${r.allocs}</td>`;
         tb.appendChild(tr);
       }
+      if (alc.iramOn && alc.iramFbRegions.length > 0) {
+        const frc = alc.iramFbRegions.length;
+        const hdr2 = document.createElement('tr');
+        hdr2.className = 'region-section-row';
+        hdr2.innerHTML = '<td colspan="8">IRAM fallback regions (last-fit, zone [' + fb(alc.iramRes) + ', ' + fb(alc.iramTotal) + '))</td>';
+        tb.appendChild(hdr2);
+        for (let i = 0; i < frc; i++) {
+          const r = alc.iramFbRegions[i]; const lg = alc.iFbRegLargest(i);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td style="color:${regionColor(i, Math.max(frc, 1))};font-weight:800">fb R${i}</td><td>${r.min}</td><td>${r.max === 0 ? '∞' : r.max}</td><td>${fb(r.total)}</td><td>${fb(r.free)}</td><td>${fb(r.minFree)}</td><td>${fb(lg)}</td><td>${r.allocs}</td>`;
+          tb.appendChild(tr);
+        }
+        // ИСПРАВЛЕНО: EXEC строка только при reserve > 0
+        if (alc.iramRes > 0) {
+          const exRow = document.createElement('tr');
+          exRow.innerHTML = `<td style="color:${EXEC_COLOR};font-weight:800">EXEC</td><td>—</td><td>—</td><td>${fb(alc.iramRes)}</td><td>${fb(alc.iramRes)}</td><td>${fb(alc.iramRes)}</td><td>${fb(alc.iramRes)}</td><td>—</td>`;
+          tb.appendChild(exRow);
+        }
+      }
     }
-
     function switchTab(n, el) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -1824,26 +1105,21 @@
       let txt;
       if (seg.type === 'free') { txt = `FREE: ${seg.len} bytes\noffset: ${seg.start}`; }
       else if (seg.type === 'exec') { txt = `IRAM EXEC: ${seg.len} bytes\noffset: ${seg.start}`; }
-      else if (seg.type === 'fallback') { txt = `IRAM FALLBACK: ${seg.len} bytes\noffset: ${seg.start}`; }
-      else if (seg.type === 'cross') { txt = `CROSS-REGION: ${seg.len} bytes\noffset: ${seg.start}\nregion: R${seg.regionIdx >= 0 ? seg.regionIdx : '?'}`; }
+      else if (seg.type === 'fallback') { txt = `IRAM FALLBACK: ${seg.len} bytes\noffset: ${seg.start}`; if (seg.regionIdx >= 0) txt += `\nfb region: R${seg.regionIdx}`; }
+      else if (seg.type === 'cross') { const isIram = seg.exec !== undefined; txt = `${isIram ? 'IRAM FB' : 'DRAM'} CROSS: ${seg.len} bytes\noffset: ${seg.start}`; txt += `\nregion: ${isIram ? 'fb ' : ''}R${seg.regionIdx >= 0 ? seg.regionIdx : '?'}`; }
       else { txt = `REGION R${seg.regionIdx >= 0 ? seg.regionIdx : '?'}: ${seg.len} bytes\noffset: ${seg.start}`; }
       if (seg.id != null) txt += `\nid: ${seg.id}`;
-      t.textContent = txt;
-      t.style.display = 'block';
+      t.textContent = txt; t.style.display = 'block';
       const rect = t.getBoundingClientRect();
-      let x = e.clientX + 12;
-      let y = e.clientY + 12;
+      let x = e.clientX + 12, y = e.clientY + 12;
       if (x + rect.width > window.innerWidth) x = e.clientX - rect.width - 12;
       if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - 12;
-      x = Math.max(4, x);
-      y = Math.max(4, y);
-      t.style.left = x + 'px';
-      t.style.top = y + 'px';
+      x = Math.max(4, x); y = Math.max(4, y);
+      t.style.left = x + 'px'; t.style.top = y + 'px';
     }
     function hideTip() { document.getElementById('tooltip').style.display = 'none'; }
-    window.onload = () => initAlloc();
+    window.onload = () => { initAlloc(); refreshControlStates(); };
     window.onbeforeunload = () => { if (reTmr) clearTimeout(reTmr); if (autoTmr) clearInterval(autoTmr); };
   </script>
 </body>
-
 </html>
