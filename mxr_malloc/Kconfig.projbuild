@@ -271,6 +271,38 @@ menu "MxR-Malloc"
             EXEC allocations are not limited by this option.
 
     # ============================================================
+    #  IRAM fallback region configuration
+    # ============================================================
+    config MXR_IRAM_FALLBACK_REGION_CONFIG
+        string "IRAM fallback region layout"
+        depends on MXR_USE_IRAM
+        default "4-0%"
+        help
+            Configures size-class regions inside the IRAM fallback zone.
+            The fallback zone is the IRAM area NOT reserved for EXEC:
+                [CONFIG_MXR_IRAM_RESERVE_BYTES, iram_end)
+
+            Format is identical to CONFIG_MXR_REGION_CONFIG:
+                <min_bytes>-<percent>%,<min_bytes>-<percent>%,...
+
+            Empty string (default) means a single flat fallback region
+            covering the whole fallback zone (original behavior).
+
+            Examples:
+                ""                    -> single flat fallback region
+                "4-40%,128-0%"        -> blocks >=4 get 40% of the zone,
+                                         blocks >=128 get the rest
+                "4-30%,256-30%,1024-0%"
+
+            EXEC allocations are NOT affected by this setting.
+            They always use the EXEC zone [0, reserve) protected by
+            CONFIG_MXR_IRAM_RESERVE_BYTES.
+
+            The number of entries determines the number of IRAM
+            fallback regions. CMake validates this string during
+            project configuration.
+
+    # ============================================================
     #  Cross-region DRAM fallback
     # ============================================================
 
