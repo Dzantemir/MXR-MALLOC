@@ -102,22 +102,21 @@ menu "MxR-Malloc"
 
     config MXR_REGION_CONFIG
         string "Region boundaries with weights"
-        default "4-12%,128-14%,256-10%,512-25%,1280-0%"
+        default "4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
         help
             Configures DRAM size-class regions using a single string.
-
             Format:
                 <min_bytes>-<percent>%,<min_bytes>-<percent>%,...
-
             Example:
-                "4-12%,128-14%,256-10%,512-25%,1280-0%"
-
-            This creates 5 regions:
-                region 0: block size >= 4 bytes
-                region 1: block size >= 128 bytes
-                region 2: block size >= 256 bytes
-                region 3: block size >= 512 bytes
-                region 4: block size >= 1280 bytes
+                "4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
+            This creates 7 regions:
+                region 0: block size >= 4 bytes    (small structs)
+                region 1: block size >= 32 bytes   (i2c_cmd_link_t)
+                region 2: block size >= 64 bytes   (spi buf, adc)
+                region 3: block size >= 128 bytes  (i2c_cmd_desc_t)
+                region 4: block size >= 256 bytes  (medium buffers)
+                region 5: block size >= 512 bytes  (DMA buffers)
+                region 6: block size >= 1024 bytes (large buffers)
 
             The min_bytes value is the lower boundary of the region.
             The next region's min_bytes defines the previous region's
@@ -239,18 +238,17 @@ menu "MxR-Malloc"
         range 0 32768
         default 2048
         help
-            Reserves this amount of free IRAM for future EXEC
-            allocations.
+            Defines the EXEC zone [0, reserve) at the start of IRAM.
 
-            Non-EXEC 32-bit allocations will not consume IRAM unless
-            enough free IRAM remains after allocation.
-
-            Example:
-                If reserve is 2048 bytes and free IRAM is 4096 bytes,
-                a 3000-byte non-EXEC allocation will be rejected from
-                IRAM because only 1096 bytes would remain.
-
-            Set to 0 to disable reservation.
+            HARD binding rules:
+              - MALLOC_CAP_EXEC allocations are placed ONLY inside
+                [0, reserve). They can never cross this boundary,
+                neither on malloc nor on realloc grow.
+              - Non-EXEC 32-bit fallback allocations can never enter
+                this zone (as before).
+              - Setting this to 0 completely disables EXEC
+                allocations: every MALLOC_CAP_EXEC request returns
+                NULL and increments exec_zone_rejects.
 
             Recommended default: 2048.
 
@@ -276,7 +274,7 @@ menu "MxR-Malloc"
     config MXR_IRAM_FALLBACK_REGION_CONFIG
         string "IRAM fallback region layout"
         depends on MXR_USE_IRAM
-        default "4-0%"
+        default "4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
         help
             Configures size-class regions inside the IRAM fallback zone.
             The fallback zone is the IRAM area NOT reserved for EXEC:
@@ -303,46 +301,277 @@ menu "MxR-Malloc"
             project configuration.
 
     # ============================================================
-    #  Cross-region DRAM fallback
+    #  Cross-region fallback (DRAM + IRAM)
     # ============================================================
-
     config MXR_CROSS_REGION_FALLBACK
-        bool "Enable cross-region DRAM fallback (last resort)"
-        default n
+        bool "Enable cross-region fallback (master switch)"
+        default y
         help
-            If a block cannot be allocated in its own size-class region,
-            try other DRAM regions as a last resort.
+            Master switch for the cross-region fallback mechanism.
+            When enabled, a block that cannot be allocated in its own
+            size-class region may be placed into another region as a
+            last resort - subject to the per-arena enable switches and
+            guard settings below.
+            DRAM and IRAM are controlled independently:
+              - CONFIG_MXR_DRAM_CROSS_ENABLED
+              - CONFIG_MXR_IRAM_CROSS_ENABLED
 
-            This can reduce allocation failures, but it may fragment
-            regions that were intended for larger blocks.
-
-            Recommended:
-                Keep disabled for predictable size-class isolation.
-
-            Enable only if your workload has rare large allocation
-            failures and you prefer allocation success over strict
-            region separation.
-
-    config MXR_CROSS_REGION_CHECK_LARGEST
-        bool "Check largest free block before cross-region fallback"
+    # ------------------------------------------------------------
+    #  DRAM cross-region
+    # ------------------------------------------------------------
+    config MXR_DRAM_CROSS_ENABLED
+        bool "Enabled - use cross-region fallback for DRAM"
         depends on MXR_CROSS_REGION_FALLBACK
-        default n
+        default y
         help
-            Before selecting a cross-region fallback candidate, check
-            whether that region actually has a contiguous free block
-            large enough.
+            Enables DRAM cross-region fallback.
+            Allocations that cannot fit in their own DRAM size-class
+            region will try other DRAM regions as a last resort,
+            subject to the guard settings below.
+            If disabled, allocations that do not fit in their own DRAM
+            region fail with alloc_fail_no_memory.
+            IRAM cross-region is controlled separately by
+            CONFIG_MXR_IRAM_CROSS_ENABLED.
 
-            Enabled:
-                Skips fragmented regions earlier.
-                Slightly slower fallback path.
+    choice
+        prompt "DRAM cross-region max_bytes guard aggressiveness"
+        depends on MXR_CROSS_REGION_FALLBACK
+        depends on MXR_DRAM_CROSS_ENABLED
+        default MXR_DRAM_CROSS_MODERATE
+        help
+            Controls the max_bytes GUARD applied during DRAM
+            cross-region fallback. The GUARD protects a target region
+            from blocks that are too large for its size class.
 
-            Disabled:
-                Faster fallback path.
-                The allocator may try a fragmented region and then move
-                to the next candidate.
+            Conservative: reject blocks > 50% of target max_bytes.
+                Best region isolation, more allocation failures.
+            Moderate (recommended): reject blocks > 75%.
+                Balanced between isolation and success rate.
+            Aggressive: reject blocks > 90%.
+                Fewer allocation failures, more fragmentation.
+            All: no max_bytes check at all.
+                Any block can go into any DRAM region.
 
-            Default is disabled because cross-region fallback itself is
-            already a rarely used emergency path.
+    config MXR_DRAM_CROSS_CONSERVATIVE
+        bool "Conservative - strict DRAM region isolation (50%)"
+        help
+            Use cross-region only as an absolute last resort.
+            Small DRAM regions are strongly protected from large blocks.
+            Use this if your workload is stable and predictable.
+
+    config MXR_DRAM_CROSS_MODERATE
+        bool "Moderate - balanced (recommended, 75%)"
+        help
+            Balanced between DRAM region isolation and allocation success.
+            This is the recommended default for most workloads.
+
+    config MXR_DRAM_CROSS_AGGRESSIVE
+        bool "Aggressive - prefer allocation success (90%)"
+        help
+            Cross-region is used more eagerly to avoid allocation
+            failures. DRAM region boundaries are weakly enforced.
+
+    config MXR_DRAM_CROSS_ALL
+        bool "All - no max_bytes guard"
+        help
+            No GUARD is applied: a cross-region block may occupy any
+            DRAM region regardless of its max_bytes. Maximizes the
+            allocation success rate, provides no region protection.
+            Note: large blocks may then consume small-class regions.
+
+    endchoice
+
+    choice
+        prompt "DRAM cross-region min_bytes guard aggressiveness"
+        depends on MXR_CROSS_REGION_FALLBACK
+        depends on MXR_DRAM_CROSS_ENABLED
+        default MXR_DRAM_CROSS_MIN_BYTES_MODERATE
+        help
+            Controls the min_bytes guard during DRAM cross-region.
+            This guard protects large-block DRAM regions from being
+            fragmented by tiny allocations.
+
+            The check is:
+                if (bytes * DIVISOR < region.min_bytes) -> skip region
+
+            Conservative (DIVISOR=1): block must be >= region.min_bytes.
+            Moderate (DIVISOR=2, recommended): >= region.min_bytes / 2.
+            Aggressive (DIVISOR=4): >= region.min_bytes / 4.
+            All: no min_bytes check at all.
+
+    config MXR_DRAM_CROSS_MIN_BYTES_CONSERVATIVE
+        bool "Conservative - strict min_bytes check (divisor 1)"
+        help
+            Block must be >= DRAM region.min_bytes.
+            Strictest protection of large-block DRAM regions.
+
+    config MXR_DRAM_CROSS_MIN_BYTES_MODERATE
+        bool "Moderate - min_bytes / 2 (recommended, divisor 2)"
+        help
+            Block must be >= DRAM region.min_bytes / 2.
+            Recommended balance between isolation and success.
+
+    config MXR_DRAM_CROSS_MIN_BYTES_AGGRESSIVE
+        bool "Aggressive - min_bytes / 4 (divisor 4)"
+        help
+            Block must be >= DRAM region.min_bytes / 4.
+            Allows more cross-region placements in DRAM.
+
+    config MXR_DRAM_CROSS_MIN_BYTES_ALL
+        bool "All - no min_bytes check"
+        help
+            Completely disable the min_bytes guard for DRAM.
+            Any block can be placed in any DRAM region.
+
+    endchoice
+
+    # ------------------------------------------------------------
+    #  IRAM fallback cross-region
+    # ------------------------------------------------------------
+    config MXR_IRAM_CROSS_ENABLED
+        bool "Enabled - use cross-region fallback for IRAM"
+        depends on MXR_CROSS_REGION_FALLBACK
+        depends on MXR_USE_IRAM
+        default y
+        help
+            Enables cross-region fallback inside the IRAM fallback zone.
+            Non-EXEC 32-bit allocations that cannot fit in their own
+            IRAM fb region will try other IRAM fb regions as a last
+            resort, subject to the guard settings below.
+            If disabled, such allocations fall through to DRAM instead
+            of trying other IRAM fb regions.
+            DRAM cross-region is controlled separately by
+            CONFIG_MXR_DRAM_CROSS_ENABLED.
+
+    choice
+        prompt "IRAM fallback cross-region max_bytes guard aggressiveness"
+        depends on MXR_CROSS_REGION_FALLBACK
+        depends on MXR_IRAM_CROSS_ENABLED
+        depends on MXR_USE_IRAM
+        default MXR_IRAM_CROSS_CONSERVATIVE
+        help
+            Controls the max_bytes GUARD inside the IRAM fallback zone.
+            IRAM is a scarce resource that competes with EXEC
+            allocations, so the recommended default is more
+            conservative than for DRAM.
+
+            Conservative (recommended): reject blocks > 50% of max_bytes.
+            Moderate: reject blocks > 75%.
+            Aggressive: reject blocks > 90%.
+            All: no max_bytes check at all.
+
+    config MXR_IRAM_CROSS_CONSERVATIVE
+        bool "Conservative - strict IRAM region isolation (recommended, 50%)"
+        help
+            Use IRAM cross-region only as an absolute last resort.
+            Protects the limited IRAM fallback zone from fragmentation.
+
+    config MXR_IRAM_CROSS_MODERATE
+        bool "Moderate - balanced (75%)"
+        help
+            Balanced between IRAM region isolation and allocation success.
+
+    config MXR_IRAM_CROSS_AGGRESSIVE
+        bool "Aggressive - prefer allocation success (90%)"
+        help
+            IRAM cross-region is used more eagerly.
+            May fragment the limited IRAM fallback zone.
+
+    config MXR_IRAM_CROSS_ALL
+        bool "All - no max_bytes guard"
+        help
+            No GUARD is applied inside the IRAM fallback zone.
+            Any block can go into any IRAM fb region.
+
+    endchoice
+
+    choice
+        prompt "IRAM fallback cross-region min_bytes guard aggressiveness"
+        depends on MXR_CROSS_REGION_FALLBACK
+        depends on MXR_IRAM_CROSS_ENABLED
+        depends on MXR_USE_IRAM
+        default MXR_IRAM_CROSS_MIN_BYTES_MODERATE
+        help
+            Controls the min_bytes guard inside the IRAM fallback zone.
+            The check is:
+                if (bytes * DIVISOR < region.min_bytes) -> skip region
+
+            Conservative (DIVISOR=1): block must be >= region.min_bytes.
+            Moderate (DIVISOR=2, recommended): >= region.min_bytes / 2.
+            Aggressive (DIVISOR=4): >= region.min_bytes / 4.
+            All: no min_bytes check at all.
+
+    config MXR_IRAM_CROSS_MIN_BYTES_CONSERVATIVE
+        bool "Conservative - strict min_bytes check (divisor 1)"
+
+    config MXR_IRAM_CROSS_MIN_BYTES_MODERATE
+        bool "Moderate - min_bytes / 2 (recommended, divisor 2)"
+
+    config MXR_IRAM_CROSS_MIN_BYTES_AGGRESSIVE
+        bool "Aggressive - min_bytes / 4 (divisor 4)"
+
+    config MXR_IRAM_CROSS_MIN_BYTES_ALL
+        bool "All - no min_bytes check"
+
+    endchoice
+
+
+    config MXR_ANTI_SLIVER
+        bool "Enable anti-sliver expansion (consume tiny leftover gaps)"
+        default y
+        help
+            When a block is cut from a gap and the leftover tail would be
+            smaller than MXR_MIN_SLICE_BYTES, the block is expanded to
+            consume the entire gap. Also prevents realloc shrink from
+            creating tiny tails.
+            Disabling removes all block expansions: every allocation gets
+            exactly the requested (4-aligned) size and every realloc shrink
+            splits the block.
+            Disable only for experiments/benchmarking: it increases the
+            number of unusable micro-gaps (slivers) and makes future
+            searches slower.
+
+
+    config MXR_MIN_SLICE_BYTES
+        int "Minimum useful gap size (anti-sliver threshold)"
+        depends on MXR_ANTI_SLIVER
+        range 4 64
+        default 8
+        help
+            If the remainder after cutting a block from a gap is smaller
+            than this value, the block is expanded to consume the entire
+            gap. This prevents creation of unusable micro-fragments.
+            Also applies to realloc shrink: if the tail would be smaller
+            than this, the block is not split.
+            Recommended: 8 bytes (2 alignment units).
+
+    config MXR_BEST_FIT_EARLY_EXIT
+        bool "Enable best-fit early-exit (stop on a good-enough gap)"
+        default y
+        help
+            When enabled, the free-gap search stops as soon as a gap with
+            waste <= requested_size >> MXR_BEST_FIT_WASTE_SHIFT is found.
+            When disabled, the allocator performs a strict best-fit scan
+            of the whole region: only an exact-fit gap (waste == 0) stops
+            the search early.
+            Disabling reduces fragmentation but makes every allocation do
+            a full descriptor scan with interrupts disabled. Use only if
+            fragmentation matters more than worst-case allocation latency.
+
+
+    config MXR_BEST_FIT_WASTE_SHIFT
+        int "Best-fit early-exit waste threshold (shift)"
+        depends on MXR_BEST_FIT_EARLY_EXIT
+        range 1 4
+        default 2
+        help
+            Controls the best-fit early-exit threshold.
+            If (gap - requested_size) <= requested_size >> SHIFT,
+            the gap is considered "good enough" and the search stops.
+            SHIFT=1: 50% waste tolerance (faster, more fragmentation)
+            SHIFT=2: 25% waste tolerance (balanced, recommended)
+            SHIFT=3: 12.5% waste tolerance (tighter, slower)
+            SHIFT=4: 6.25% waste tolerance (near-exact best-fit)
 
     # ============================================================
     #  Integration mode
@@ -460,7 +689,7 @@ menu "MxR-Malloc"
 
         config MXR_WRAP_LIBC
             bool "Wrap plain malloc / free / calloc / realloc / zalloc"
-            default n
+            default y
             help
                 Wrap plain libc-style allocation functions:
                     malloc

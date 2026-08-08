@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  1. Select source files based on integration mode
 # ============================================================
 set(MXR_SRCS "mxr_malloc.c")
@@ -54,6 +54,31 @@ if(_MXR_CFG)
             "MxR-malloc: Too many DRAM regions (${_MXR_DRAM_COUNT}). "
             "Maximum is 32.")
     endif()
+    # FIX(bug#4): первая граница должна быть <= 4 (MXR_ALIGN_SIZE),
+    # иначе блоки размером 4..(min-1) не попадут ни в один регион.
+    list(GET _MXR_ENTRIES 0 _MXR_FIRST_ENTRY)
+    string(STRIP "${_MXR_FIRST_ENTRY}" _MXR_FIRST_ENTRY)
+    if(_MXR_FIRST_ENTRY MATCHES "^([0-9]+)-")
+        if(CMAKE_MATCH_1 GREATER 4)
+            message(FATAL_ERROR
+                "MxR-malloc: first DRAM region boundary is ${CMAKE_MATCH_1}, "
+                "must be <= 4. Blocks smaller than ${CMAKE_MATCH_1} bytes "
+                "would be unallocatable.")
+        endif()
+    endif()
+    set(_MXR_PCT_SUM 0)
+    foreach(_entry ${_MXR_ENTRIES})
+        string(REGEX MATCH "^[0-9]+-([0-9]+)%$" _MATCH "${_entry}")
+        if(_MATCH)
+            math(EXPR _MXR_PCT_SUM "${_MXR_PCT_SUM} + ${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    if(_MXR_PCT_SUM GREATER 100)
+        message(FATAL_ERROR
+            "MxR-malloc: DRAM region percent sum is ${_MXR_PCT_SUM}%, must be <= 100%")
+    endif()
+    message(STATUS
+        "MxR-malloc: DRAM region percent sum = ${_MXR_PCT_SUM}%")
     message(STATUS
         "MxR-malloc: ${_MXR_DRAM_COUNT} DRAM region(s) from '${CONFIG_MXR_REGION_CONFIG}'")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE
@@ -90,6 +115,28 @@ if(CONFIG_MXR_USE_IRAM)
                 "MxR-malloc: Too many IRAM fallback regions (${_MXR_IRAM_COUNT}). "
                 "Maximum is 32.")
         endif()
+        list(GET _MXR_IRAM_ENTRIES 0 _MXR_IRAM_FIRST_ENTRY)
+        string(STRIP "${_MXR_IRAM_FIRST_ENTRY}" _MXR_IRAM_FIRST_ENTRY)
+        if(_MXR_IRAM_FIRST_ENTRY MATCHES "^([0-9]+)-")
+            if(CMAKE_MATCH_1 GREATER 4)
+                message(FATAL_ERROR
+                    "MxR-malloc: first IRAM fallback region boundary is "
+                    "${CMAKE_MATCH_1}, must be <= 4.")
+            endif()
+        endif()
+    set(_MXR_PCT_SUM 0)
+    foreach(_entry ${_MXR_IRAM_ENTRIES})
+        string(REGEX MATCH "^[0-9]+-([0-9]+)%$" _MATCH "${_entry}")
+        if(_MATCH)
+            math(EXPR _MXR_PCT_SUM "${_MXR_PCT_SUM} + ${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    if(_MXR_PCT_SUM GREATER 100)
+        message(FATAL_ERROR
+            "MxR-malloc: IRAM region percent sum is ${_MXR_PCT_SUM}%, must be <= 100%")
+    endif()
+    message(STATUS
+        "MxR-malloc: IRAM region percent sum = ${_MXR_PCT_SUM}%")
         message(STATUS
             "MxR-malloc: ${_MXR_IRAM_COUNT} IRAM fallback region(s) from "
             "'${CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG}'")

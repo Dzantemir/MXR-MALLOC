@@ -1,7 +1,8 @@
-#include "mxr_malloc.h"
+﻿#include "mxr_malloc.h"
 #include <stdint.h>
 #include <stddef.h>
 #include "esp_attr.h"
+#include <string.h>
 
 #ifndef IRAM_ATTR
 #define IRAM_ATTR
