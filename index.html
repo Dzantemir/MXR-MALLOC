@@ -336,7 +336,7 @@
     }
 
     #log {
-      height: 250px;
+      max-height: 1000px;
       overflow-y: auto;
       background: #0a0d12;
       border: 1px solid var(--border);
@@ -451,7 +451,7 @@
 
     .scroll {
       overflow: auto;
-      max-height: 220px
+      max-height: 2000px
     }
 
     .presetBtns {
@@ -699,13 +699,10 @@
               <tbody></tbody>
             </table>
           </div>
+          <h3 style="margin-top:10px">Trace (every step of the algorithm)</h3>
+          <div id="log"></div>
         </section>
       </div>
-
-      <section class="panel">
-        <h3>Trace (every step of the algorithm)</h3>
-        <div id="log"></div>
-      </section>
     </main>
   </div>
 
@@ -2079,7 +2076,7 @@
         ['cross_region', st.crossAllocs], ['cross_guard_rej', st.guardRej], ['cross_skip_frag', st.crossSkipFrag],
         ['early_exits', st.earlyExits], ['anti_sliver_exp', st.antiSliverExp], ['fail_no_mem', st.failNoMem],
         ['fail_table_full', st.failTableFull], ['invalid_free', st.invalidFree], ['iram total/free', S.iram.enabled ? `${st.iramTotal}/${st.iramFree}` : '—'],
-        ['min_free(8BIT)',getMinFreeSizeCaps(CAP_8BIT)],['min_free(32BIT)',getMinFreeSizeCaps(CAP_32BIT)],['min_free(EXEC)',getMinFreeSizeCaps(CAP_EXEC)],
+        ['min_free(8BIT)', getMinFreeSizeCaps(CAP_8BIT)], ['min_free(32BIT)', getMinFreeSizeCaps(CAP_32BIT)], ['min_free(EXEC)', getMinFreeSizeCaps(CAP_EXEC)],
       ];
       document.getElementById('statGrid').innerHTML = g.map(([k, v]) => `<span class="k">${k}</span><span></span><span class="v">${v}</span>`).join('');
       const row = (r, i, largest) => `<tr><td>${i}</td><td class="l">[${r.min_bytes}..${r.max_bytes || '∞'}]</td><td>${r.total_bytes}</td><td>${r.free_bytes}</td><td>${r.min_free_bytes}</td><td>${largest}</td><td>${r.alloc_count}</td><td>${r.cache_valid ? r.largest_cache : '—'}</td></tr>`;
