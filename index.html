@@ -486,88 +486,100 @@
     <aside class="panel" id="settings">
       <h3>Settings (Kconfig.projbuild)</h3>
       <p class="hint">All options apply instantly. Structural changes (arena sizes, region layout, IRAM toggle)
-        re-initialize the heap automatically.</p>
+        re-initialize the heap automatically. Sub-options collapse when their parent is disabled.</p>
 
       <fieldset>
         <legend>Arenas</legend>
         <div class="row"><label>DRAM arena, bytes</label><input type="number" id="cfgDramSize" value="32768" min="1024"
             step="1024"></div>
         <div class="row"><label><input type="checkbox" id="cfgUseIram" checked> CONFIG_MXR_USE_IRAM</label></div>
-        <div class="row"><label>IRAM arena, bytes</label><input type="number" id="cfgIramSize" value="16384" min="516"
-            step="1024"></div>
-        <div class="row"><label>IRAM_RESERVE_BYTES</label><input type="number" id="cfgReserve" value="2048" min="0"
-            step="256"></div>
-        <div class="row"><label>IRAM_FALLBACK_MAX (0=unltd)</label><input type="number" id="cfgFbMax" value="0" min="0">
+        <div id="iramArenaGroup">
+          <div class="row"><label>IRAM arena, bytes</label><input type="number" id="cfgIramSize" value="16384" min="516"
+              step="1024"></div>
+          <div class="row"><label>IRAM_RESERVE_BYTES</label><input type="number" id="cfgReserve" value="2048" min="0"
+              step="256"></div>
+          <div class="row"><label>IRAM_FALLBACK_MAX (0=unltd)</label><input type="number" id="cfgFbMax" value="0"
+              min="0"></div>
+          <p class="hint">EXEC zone = [0, reserve). EXEC blocks never leave it. reserve = 0 → EXEC allocations are
+            rejected entirely.</p>
         </div>
-        <p class="hint">EXEC zone = [0, reserve). EXEC blocks never leave it. reserve = 0 → EXEC allocations are
-          rejected entirely.</p>
       </fieldset>
 
       <fieldset>
         <legend>Descriptor tables</legend>
         <div class="row"><label>MXR_MAX_DESC (DRAM)</label><input type="number" id="cfgMaxDesc" value="256" min="1"
             max="4096"></div>
-        <div class="row"><label>MXR_IRAM_MAX_DESC</label><input type="number" id="cfgIramMaxDesc" value="128" min="1"
-            max="4096"></div>
+        <div class="row" id="rowIramMaxDesc"><label>MXR_IRAM_MAX_DESC</label><input type="number" id="cfgIramMaxDesc"
+            value="128" min="1" max="4096"></div>
       </fieldset>
 
       <fieldset>
         <legend>Regions</legend>
         <div class="row"><label style="width:100%">MXR_REGION_CONFIG (DRAM)</label></div>
         <input type="text" id="cfgDramRegions" value="4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%">
-        <div class="row" style="margin-top:6px"><label style="width:100%">IRAM_FALLBACK_REGION_CONFIG</label></div>
-        <input type="text" id="cfgIramRegions" value="4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%">
+        <div id="iramRegionsGroup">
+          <div class="row" style="margin-top:6px"><label style="width:100%">IRAM_FALLBACK_REGION_CONFIG</label></div>
+          <input type="text" id="cfgIramRegions" value="4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%">
+        </div>
       </fieldset>
 
       <fieldset>
         <legend>Anti-fragmentation</legend>
         <div class="row"><label><input type="checkbox" id="cfgAntiSliver" checked> MXR_ANTI_SLIVER</label></div>
-        <div class="row"><label>MIN_SLICE_BYTES</label><input type="number" id="cfgMinSlice" value="8" min="4" max="64">
-        </div>
+        <div class="row" id="rowMinSlice"><label>MIN_SLICE_BYTES</label><input type="number" id="cfgMinSlice" value="8"
+            min="4" max="64"></div>
         <div class="row"><label><input type="checkbox" id="cfgEarlyExit" checked> BEST_FIT_EARLY_EXIT</label></div>
-        <div class="row"><label>WASTE_SHIFT</label><input type="number" id="cfgWasteShift" value="2" min="1" max="4">
-        </div>
+        <div class="row" id="rowWasteShift"><label>WASTE_SHIFT</label><input type="number" id="cfgWasteShift" value="2"
+            min="1" max="4"></div>
       </fieldset>
 
       <fieldset>
         <legend>Cross-region fallback</legend>
         <div class="row"><label><input type="checkbox" id="cfgCross" checked> MXR_CROSS_REGION_FALLBACK (master)</label>
         </div>
-        <div class="row" style="margin-top:6px"><label><input type="checkbox" id="cfgDramCrossEn" checked>
-            MXR_DRAM_CROSS_ENABLED</label></div>
-        <div class="row"><label>DRAM max_bytes guard</label>
-          <select id="cfgDramCross">
-            <option value="conservative">Conservative (GUARD 50%)</option>
-            <option value="moderate" selected>Moderate (GUARD 75%)</option>
-            <option value="aggressive">Aggressive (GUARD 90%)</option>
-            <option value="all">All (no guard)</option>
-          </select>
-        </div>
-        <div class="row"><label>DRAM min_bytes guard</label>
-          <select id="cfgDramDiv">
-            <option value="1">Conservative (÷1)</option>
-            <option value="2" selected>Moderate (÷2)</option>
-            <option value="4">Aggressive (÷4)</option>
-            <option value="0">All (no check)</option>
-          </select>
-        </div>
-        <div class="row" style="margin-top:6px"><label><input type="checkbox" id="cfgIramCrossEn" checked>
-            MXR_IRAM_CROSS_ENABLED</label></div>
-        <div class="row"><label>IRAM max_bytes guard</label>
-          <select id="cfgIramCross">
-            <option value="conservative" selected>Conservative (GUARD 50%)</option>
-            <option value="moderate">Moderate (GUARD 75%)</option>
-            <option value="aggressive">Aggressive (GUARD 90%)</option>
-            <option value="all">All (no guard)</option>
-          </select>
-        </div>
-        <div class="row"><label>IRAM min_bytes guard</label>
-          <select id="cfgIramDiv">
-            <option value="1">Conservative (÷1)</option>
-            <option value="2" selected>Moderate (÷2)</option>
-            <option value="4">Aggressive (÷4)</option>
-            <option value="0">All (no check)</option>
-          </select>
+        <div id="crossGroup">
+          <div class="row" style="margin-top:6px"><label><input type="checkbox" id="cfgDramCrossEn" checked>
+              MXR_DRAM_CROSS_ENABLED</label></div>
+          <div id="dramCrossGroup">
+            <div class="row"><label>DRAM max_bytes guard</label>
+              <select id="cfgDramCross">
+                <option value="conservative">Conservative (GUARD 50%)</option>
+                <option value="moderate" selected>Moderate (GUARD 75%)</option>
+                <option value="aggressive">Aggressive (GUARD 90%)</option>
+                <option value="all">All (no guard)</option>
+              </select>
+            </div>
+            <div class="row"><label>DRAM min_bytes guard</label>
+              <select id="cfgDramDiv">
+                <option value="1">Conservative (÷1)</option>
+                <option value="2" selected>Moderate (÷2)</option>
+                <option value="4">Aggressive (÷4)</option>
+                <option value="0">All (no check)</option>
+              </select>
+            </div>
+          </div>
+          <div id="iramCrossEnGroup">
+            <div class="row" style="margin-top:6px"><label><input type="checkbox" id="cfgIramCrossEn" checked>
+                MXR_IRAM_CROSS_ENABLED</label></div>
+            <div id="iramCrossGroup">
+              <div class="row"><label>IRAM max_bytes guard</label>
+                <select id="cfgIramCross">
+                  <option value="conservative" selected>Conservative (GUARD 50%)</option>
+                  <option value="moderate">Moderate (GUARD 75%)</option>
+                  <option value="aggressive">Aggressive (GUARD 90%)</option>
+                  <option value="all">All (no guard)</option>
+                </select>
+              </div>
+              <div class="row"><label>IRAM min_bytes guard</label>
+                <select id="cfgIramDiv">
+                  <option value="1">Conservative (÷1)</option>
+                  <option value="2" selected>Moderate (÷2)</option>
+                  <option value="4">Aggressive (÷4)</option>
+                  <option value="0">All (no check)</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
       </fieldset>
 
@@ -703,6 +715,7 @@
           <div id="log"></div>
         </section>
       </div>
+
     </main>
   </div>
 
@@ -728,7 +741,6 @@
 
   <script>
     "use strict";
-    /* constants */
     const CAP_EXEC = 1 << 0, CAP_32BIT = 1 << 1, CAP_8BIT = 1 << 2, CAP_DMA = 1 << 3, CAP_SPIRAM = 1 << 10, CAP_INTERNAL = 1 << 11;
     const DRAM_CAPS = CAP_8BIT | CAP_32BIT | CAP_DMA | CAP_INTERNAL;
     const UNLIMITED = 0;
@@ -737,7 +749,6 @@
     const REGIONS_MAX = 32;
     const DRAM_BASE = 0x3FFC0000;
     const IRAM_BASE = 0x40100000;
-
     const PALETTE = ['#4ea1ff', '#59d98e', '#f2cc60', '#ff8f6b', '#c792ea', '#63e6e2', '#ff7ab8', '#a3b18a', '#e0e05e', '#7fd1ff'];
     const IRAM_PALETTE = ['#b48cff', '#8f7bff', '#d68cff', '#7b9bff', '#a06bff', '#c39bff', '#8a6bff', '#d0a5ff', '#9d8cff', '#b07bff'];
 
@@ -811,12 +822,42 @@
       if (cfg.earlyExit) return Math.max(bytes >>> cfg.wasteShift, ALIGN);
       return 0;
     }
-    /* NEW: 'all' → null → GUARD not compiled/applied (as in C "All" preset) */
     function guardFor(level) {
       if (level === 'conservative') return [1, 2];
       if (level === 'aggressive') return [9, 10];
       if (level === 'moderate') return [3, 4];
       return null;
+    }
+
+    /* ---------- settings visibility (collapse sub-options) ---------- */
+    function updateSettingsVisibility() {
+      const useIram = document.getElementById('cfgUseIram').checked;
+      const antiSliver = document.getElementById('cfgAntiSliver').checked;
+      const earlyExit = document.getElementById('cfgEarlyExit').checked;
+      const cross = document.getElementById('cfgCross').checked;
+      const dramCrossEn = document.getElementById('cfgDramCrossEn').checked;
+      const iramCrossEn = document.getElementById('cfgIramCrossEn').checked;
+
+      // CONFIG_MXR_USE_IRAM children
+      document.getElementById('iramArenaGroup').style.display = useIram ? '' : 'none';
+      document.getElementById('rowIramMaxDesc').style.display = useIram ? '' : 'none';
+      document.getElementById('iramRegionsGroup').style.display = useIram ? '' : 'none';
+
+      // MXR_ANTI_SLIVER child
+      document.getElementById('rowMinSlice').style.display = antiSliver ? '' : 'none';
+
+      // BEST_FIT_EARLY_EXIT child
+      document.getElementById('rowWasteShift').style.display = earlyExit ? '' : 'none';
+
+      // MXR_CROSS_REGION_FALLBACK master
+      document.getElementById('crossGroup').style.display = cross ? '' : 'none';
+
+      // DRAM cross sub-options (need master + DRAM enabled)
+      document.getElementById('dramCrossGroup').style.display = (cross && dramCrossEn) ? '' : 'none';
+
+      // IRAM cross enable row needs master + USE_IRAM; its guards need IRAM enabled too
+      document.getElementById('iramCrossEnGroup').style.display = (cross && useIram) ? '' : 'none';
+      document.getElementById('iramCrossGroup').style.display = (cross && useIram && iramCrossEn) ? '' : 'none';
     }
 
     /* ---------- state ---------- */
@@ -825,17 +866,14 @@
     let nextId = 1, opNo = 0;
     let opTrace = [];
     let verbose = true;
-
     let history = [];
     const HISTORY_MAX = 240;
     function pushHistory(e) { history.push(e); if (history.length > HISTORY_MAX) history.shift(); }
     let afEvents = [];
     const AF_MAX = 400;
     function recordAF(e) { e.opNo = opNo; e.minSlice = cfg.minSlice; afEvents.push(e); if (afEvents.length > AF_MAX) afEvents.shift(); }
-
     function tr(msg, cls) { if (verbose) opTrace.push({ msg, cls: cls || 't-step' }); }
 
-    /* region config parser */
     function parseRegionConfig(s, maxCount) {
       const out = [];
       if (!s) return out;
@@ -851,7 +889,6 @@
       return out;
     }
 
-    /* DRAM region init */
     function initRegionsTempSingle(total) {
       return [{
         caps: DRAM_CAPS, start_byte: 0, total_bytes: total, min_bytes: ALIGN, max_bytes: UNLIMITED,
@@ -907,8 +944,6 @@
         parsed[i].max_bytes = (i === parsed.length - 1) ? UNLIMITED : parsed[i + 1].min_bytes - 1;
       return initRegionsExact(parsed, total);
     }
-
-    /* IRAM fb region init */
     function initIramFbRegions() {
       const regs = [];
       if (S.iram.fbZoneTotal === 0) { S.iram.fbRegions = regs; return; }
@@ -929,7 +964,6 @@
         if (parsed[i].min_bytes <= parsed[i - 1].min_bytes) throw 'IRAM fb: boundaries must increase';
       for (let i = 0; i < parsed.length; i++)
         parsed[i].max_bytes = (i === parsed.length - 1) ? UNLIMITED : parsed[i + 1].min_bytes - 1;
-
       let remaining = S.iram.fbZoneTotal;
       for (let i = 0; i < parsed.length; i++) {
         let bytes;
@@ -954,12 +988,9 @@
       S.iram.fbRegions = regs;
     }
 
-    /* mxr_init */
     function mxrInit() {
       const errEl = document.getElementById('cfgErr'); errEl.textContent = '';
-      opTrace = [];
-      history = [];
-      afEvents = [];
+      opTrace = []; history = []; afEvents = [];
       let dramTotal = Math.floor((cfg.dramSize || 0) / 4) * 4;
       if (!(dramTotal >= 1024)) dramTotal = 1024;
       S = {
@@ -967,8 +998,7 @@
         dram: { total: dramTotal, desc: [], regions: [], freeBytes: 0, minFreeBytes: 0 },
         iram: {
           enabled: false, total: 0, desc: [], fbZoneStart: 0, fbZoneTotal: 0, fbRegions: [],
-          freeBytes: 0, minFreeBytes: 0, execAllocs: 0, fallbackAllocs: 0,
-          execFree: 0, execMinFree: 0
+          freeBytes: 0, minFreeBytes: 0, execAllocs: 0, fallbackAllocs: 0, execFree: 0, execMinFree: 0
         },
         stats: {
           initialized: false, regionCount: 0, iramFbRegionCount: 0,
@@ -984,7 +1014,6 @@
         }
       };
       S.dram.freeBytes = S.dram.total; S.dram.minFreeBytes = S.dram.total;
-
       if (cfg.useIram) {
         let bytes = Math.floor((cfg.iramSize || 0) / 4) * 4;
         if (bytes <= 512 || bytes >= 0x10000) {
@@ -1012,14 +1041,12 @@
             tr('  EXEC zone is EMPTY (reserve=0) → all MALLOC_CAP_EXEC allocations will be rejected', 't-warn');
         }
       }
-
       try { S.dram.regions = initRegionsKconfig(cfg.dramRegions, S.dram.total); }
       catch (e) {
         errEl.textContent = e;
         tr(`region init failed (${e}) — using single flat region`, 't-warn');
         S.dram.regions = initRegionsTempSingle(S.dram.total);
       }
-
       let totalBytes = S.dram.total, freeBytes = S.dram.total, largest = 0;
       for (const r of S.dram.regions) if (r.total_bytes > largest) largest = r.total_bytes;
       if (S.iram.enabled) {
@@ -1036,7 +1063,6 @@
       st.iramExecZoneMinFree = S.iram.execMinFree;
       S.initialized = true;
       allocs = {}; nextId = 1;
-
       tr(`init ok: DRAM base=${hex(DRAM_BASE)} bytes=${S.dram.total}, DRAM regions: ${S.dram.regions.length}` +
         (S.iram.enabled ? `, IRAM base=${hex(IRAM_BASE)} bytes=${S.iram.total}` : ', IRAM disabled'), 't-ok');
       S.dram.regions.forEach((r, i) => { tr(`  DRAM region ${i}: [${r.min_bytes}..${r.max_bytes || '∞'}] off ${r.start_byte}..${r.start_byte + r.total_bytes} (${r.total_bytes} bytes)`); });
@@ -1045,7 +1071,6 @@
       renderAll();
     }
 
-    /* descriptor arrays */
     function descFindKey(descs, key) {
       let l = 0, r = descs.length;
       while (l < r) {
@@ -1071,7 +1096,6 @@
       return { ok: true };
     }
 
-    /* DRAM core */
     function regionByOff(off) {
       for (let i = 0; i < S.dram.regions.length; i++) {
         const r = S.dram.regions[i];
@@ -1133,7 +1157,6 @@
       }
       return bytes;
     }
-
     function findBestFree(ri, bytes) {
       const reg = S.dram.regions[ri];
       const rs = reg.start_byte, re = rs + reg.total_bytes, maxAllowed = reg.max_bytes;
@@ -1170,7 +1193,6 @@
       }
       return { found: false, largest, exact: true };
     }
-
     function findFreeAndLargest(ri, bytes) {
       const reg = S.dram.regions[ri];
       const rs = reg.start_byte, re = rs + reg.total_bytes, maxAllowed = reg.max_bytes;
@@ -1197,7 +1219,6 @@
       if (found) alloc = sliverExpand(bestGap, bestGap - bytes, maxAllowed, bytes, 'cross find', 'dram', label);
       return { found, off: bestOff, alloc, largest };
     }
-
     function tryAllocRegion(ri, bytes) {
       const reg = S.dram.regions[ri];
       if (reg.free_bytes < bytes) { tr(`    region ${ri}: free_bytes ${reg.free_bytes} < ${bytes}`); return null; }
@@ -1210,7 +1231,6 @@
       if (!res.found) return null;
       return { off: res.off, alloc: res.alloc };
     }
-
     function buildOrder(skip, n) {
       const o = [];
       if (skip < 0 || skip >= n) { for (let i = 0; i < n; i++)o.push(i); }
@@ -1218,8 +1238,6 @@
       else { for (let i = skip - 1; i >= 0; i--)o.push(i); for (let i = skip + 1; i < n; i++)o.push(i); }
       return o;
     }
-
-    /* DRAM cross-region: gated by cfg.cross && cfg.dramCrossEn */
     function tryCrossRegion(bytes, caps, skipRegion) {
       const n = S.dram.regions.length; if (!n) return null;
       const g = guardFor(cfg.dramCross);
@@ -1250,10 +1268,8 @@
       return null;
     }
 
-    /* IRAM core */
     function fbRegionEnd(i) { const r = S.iram.fbRegions[i]; return r.start_byte + r.total_bytes; }
     function iramExecZoneEnd() { return S.iram.fbZoneStart; }
-
     function iramFbRegionByOff(off) {
       for (let i = 0; i < S.iram.fbRegions.length; i++) {
         const r = S.iram.fbRegions[i];
@@ -1383,7 +1399,6 @@
       if (candEnd > rs) consider(rs, candEnd - rs);
       return { found, off: outOff, alloc: outAlloc, largest };
     }
-    /* IRAM fb cross-region: gated by cfg.cross && cfg.iramCrossEn */
     function iramFbTryCrossRegion(bytes, skipReg) {
       const n = S.iram.fbRegions.length; if (!n) return null;
       const g = guardFor(cfg.iramCross);
@@ -1480,7 +1495,6 @@
       return largest;
     }
 
-    /* ptr → arena */
     function ptrToArena(ptr) {
       if ((ptr & 3) !== 0) return null;
       if (ptr >= DRAM_BASE && ptr < DRAM_BASE + S.dram.total) return 'dram';
@@ -1501,7 +1515,6 @@
       return idx >= 0 ? descs[idx].len : null;
     }
 
-    /* mxr_malloc_caps_locked — MAIN PATH */
     function mallocCapsLocked(size, caps) {
       if (!S.initialized) { tr('  ! not initialized', 't-err'); return null; }
       if (size === 0) size = 1;
@@ -1509,7 +1522,6 @@
       size = align4(size);
       const bytes = size;
       tr(`  aligned size: ${bytes} bytes, caps=${capsStr(caps)}`);
-
       if (caps & CAP_EXEC) {
         if ((caps & ~(CAP_EXEC | CAP_32BIT | CAP_INTERNAL)) !== 0) {
           S.stats.failNoMem++; tr('  EXEC: incompatible extra caps', 't-err'); return null;
@@ -1523,7 +1535,8 @@
         tr(`  EXEC path: first-fit inside EXEC zone [0, ${iramExecZoneEnd()})`);
         const off = iramFindFreeInExecZone(bytes);
         if (off === null) {
-          S.stats.failNoMem++;
+          if (bytes > iramExecZoneEnd()) S.stats.execZoneRejects++;
+          else S.stats.failNoMem++;
           tr(`  EXEC: no gap >= ${bytes} inside EXEC zone (never falls back to fb zone)`, 't-err');
           return null;
         }
@@ -1534,7 +1547,6 @@
         tr(`  EXEC: allocated @IRAM+${off} len ${bytes} (exec_allocs++)`, 't-ok');
         return commitAlloc('iram', off, bytes, caps, 'exec', null, null);
       }
-
       if (S.iram.enabled && capsAllowIramFallback(caps) && iramCanFallback(bytes)) {
         tr('  IRAM fallback path (32BIT without 8BIT/DMA/SPIRAM)');
         const fbReg = iramFbRegionForSize(bytes);
@@ -1560,7 +1572,6 @@
             found = false;
           }
         }
-        /* Step 2: IRAM fb cross-region — gated by cfg.cross && cfg.iramCrossEn */
         if (!found && cfg.cross && cfg.iramCrossEn) {
           const res = iramFbTryCrossRegion(bytes, fbReg);
           if (res) {
@@ -1579,7 +1590,6 @@
       } else if (S.iram.enabled) {
         tr('  IRAM fallback skipped (caps include 8BIT/DMA/SPIRAM/EXEC)');
       }
-
       const region = regionForSize(bytes, caps);
       tr(`  DRAM region_for_size → region ${region}` + (region >= 0 ? ` [${S.dram.regions[region].min_bytes}..${S.dram.regions[region].max_bytes || '∞'}]` : ''));
       if (region >= 0) {
@@ -1593,21 +1603,17 @@
           return commitAlloc('dram', res.off, res.alloc, caps, 'dram-own', null, region);
         }
       }
-
-      /* Step 2: DRAM cross-region — gated by cfg.cross && cfg.dramCrossEn */
       if (cfg.cross && cfg.dramCrossEn) {
         const p = tryCrossRegion(bytes, caps, region);
         if (p !== null) return p;
       } else if (cfg.cross && !cfg.dramCrossEn) {
         tr('  DRAM cross-region: disabled (MXR_DRAM_CROSS_ENABLED=n)');
       }
-
       S.stats.failNoMem++;
       tr('  OUT OF MEMORY (alloc_fail_no_memory++)', 't-err');
       return null;
     }
 
-    /* public operations */
     function opMalloc(size, caps, label) {
       opNo++; opTrace = [];
       tr(`request: size=${size} caps=${capsStr(caps)}`, 't-op');
@@ -1661,7 +1667,6 @@
       renderAll();
     }
 
-    /* realloc */
     function mxrRealloc(ptr, newsize, caps) {
       if (!ptr) return mallocCapsLocked(newsize, caps);
       if (!S.initialized) return null;
@@ -1671,7 +1676,6 @@
       const newBytes = newsize;
       const arena = ptrToArena(ptr);
       if (!arena) { S.stats.invalidFree++; tr('  realloc: ptr outside arenas', 't-err'); return null; }
-
       if (arena === 'dram') {
         const off = ptr - DRAM_BASE;
         const idx = descFindKey(S.dram.desc, off);
@@ -1725,8 +1729,6 @@
         mxrFree(ptr); delete allocs[ptr];
         return np;
       }
-
-      /* IRAM realloc */
       const off = ptr - IRAM_BASE;
       const idx = descFindKey(S.iram.desc, off);
       if (idx < 0) { S.stats.invalidFree++; tr('  IRAM realloc: descriptor not found', 't-err'); return null; }
@@ -1739,7 +1741,6 @@
       else inPlaceAllowed = !oldExec && capsAllowIramFallback(caps);
       tr(`  IRAM realloc: old=${oldBytes} new=${newBytes} exec=${oldExec} inPlaceAllowed=${inPlaceAllowed}`);
       const irLabel = oldExec ? 'EXEC zone' : ('IRAM fb r' + iramFbRegionByOff(off));
-
       if (inPlaceAllowed) {
         if (newBytes === oldBytes) return ptr;
         if (newBytes < oldBytes) {
@@ -1820,7 +1821,6 @@
       return np;
     }
 
-    /* statistics */
     function dramRegionLargest(i) {
       const r = S.dram.regions[i], rs = r.start_byte, re = rs + r.total_bytes;
       let cur = rs, largest = 0;
@@ -1906,14 +1906,13 @@
       }
       return bytes;
     }
-    /* mxr_get_min_free_size_caps — синхронно с исправленным C-кодом */
     function getMinFreeSizeCaps(caps) {
       if (!S || !S.initialized) return 0;
       let bytes = 0;
       for (let i = 0; i < S.dram.regions.length; i++) if (regionCapsOk(i, caps)) bytes += S.dram.regions[i].min_free_bytes;
       if (S.iram.enabled) {
         if (caps & CAP_EXEC) {
-          if ((caps & ~(CAP_EXEC | CAP_32BIT | CAP_INTERNAL)) === 0) bytes += S.iram.execMinFree; // min, NOT current free
+          if ((caps & ~(CAP_EXEC | CAP_32BIT | CAP_INTERNAL)) === 0) bytes += S.iram.execMinFree;
         }
         else if ((caps & CAP_32BIT) && !(caps & (CAP_DMA | CAP_8BIT | CAP_SPIRAM))) {
           for (const r of S.iram.fbRegions) bytes += r.min_free_bytes;
@@ -1922,7 +1921,6 @@
       return bytes;
     }
 
-    /* tooltip (delegated, no stuck tooltips) */
     const tooltip = document.getElementById('tooltip');
     function moveTip(e) {
       let x = e.clientX + 14, y = e.clientY + 14;
@@ -1952,7 +1950,6 @@
     });
     window.addEventListener('scroll', hideTip, true);
 
-    /* rendering */
     function arenaHtml(title, base, total, descs, regions, extra) {
       const W = 1000; const sc = W / total;
       let h = `<div class="arenaWrap"><div class="arenaTitle"><b>${title}</b><span>base ${hex(base)} · ${total} bytes · scale 1px = ${(total / W).toFixed(1)}B</span></div>`;
@@ -2088,7 +2085,6 @@
     }
     function renderAll() { if (!S) return; renderMaps(); renderHistory(); renderAFChart(); renderAllocs(); renderStats(); }
 
-    /* log */
     const logEl = document.getElementById('log');
     let logCount = 0;
     function logLine(msg, cls) {
@@ -2106,7 +2102,6 @@
     }
     function clearLog() { logEl.innerHTML = ''; logCount = 0; }
 
-    /* UI */
     function getCapsFromForm() {
       let c = 0;
       if (document.getElementById('capExec').checked) c |= CAP_EXEC;
@@ -2126,7 +2121,6 @@
       opFree(p);
     }
 
-    /* realloc modal */
     let modalPtr = 0;
     function openRealloc(ptr) {
       modalPtr = ptr;
@@ -2150,7 +2144,6 @@
       opRealloc(modalPtr, +document.getElementById('reallocSize').value, c);
     }
 
-    /* SDK presets */
     function scenarioI2C() {
       logLine('=== Scenario i2c.c: driver install + cmd link (all MALLOC_CAP_8BIT) ===', 't-op');
       opMalloc(20, CAP_8BIT, 'i2c_obj_t');
@@ -2192,7 +2185,6 @@
       opMalloc(1000, CAP_8BIT, 'large block after fragmentation');
     }
 
-    /* stress + reset */
     let stressTimer = null, stressOps = 0;
     function rnd(n) { return Math.floor(Math.random() * n); }
     function stressStep() {
@@ -2249,7 +2241,7 @@
       logLine('Simulator reset — heap re-initialized, all allocations and event charts cleared', 't-warn');
     }
 
-    /* settings on the fly */
+    /* ---------- settings on the fly + visibility ---------- */
     let lastStructKey = null;
     let debounceTimer = null;
     function structKey() {
@@ -2270,22 +2262,24 @@
       }
     }
     function settingsHandler(e) {
+      updateSettingsVisibility();
       const isText = e.target && e.target.tagName === 'INPUT' && e.target.type === 'text';
       clearTimeout(debounceTimer);
       if (isText) debounceTimer = setTimeout(applySettings, 600);
       else applySettings();
     }
 
-    /* startup */
+    /* ---------- startup ---------- */
     document.querySelectorAll('#settings input, #settings select').forEach(el => {
       el.addEventListener('input', settingsHandler);
       el.addEventListener('change', settingsHandler);
     });
     readConfig();
     lastStructKey = structKey();
+    updateSettingsVisibility();
     mxrInit();
     logLine('Simulator ready. malloc path order: EXEC (first-fit INSIDE [0, reserve) only) → IRAM fallback (last-fit, BEFORE DRAM!) → DRAM own region (best-fit) → DRAM cross-region.', 't-warn');
-    logLine('Cross-region is now gated per arena: MXR_DRAM_CROSS_ENABLED / MXR_IRAM_CROSS_ENABLED checkboxes + "All (no guard)" option disables the max_bytes GUARD entirely. Guard rejections are counted in cross_guard_rej.', 't-warn');
+    logLine('Cross-region is gated per arena: MXR_DRAM_CROSS_ENABLED / MXR_IRAM_CROSS_ENABLED checkboxes + "All (no guard)" option disables the max_bytes GUARD entirely. Guard rejections are counted in cross_guard_rej.', 't-warn');
   </script>
 </body>
 
