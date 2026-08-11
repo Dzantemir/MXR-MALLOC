@@ -336,16 +336,16 @@ I mxr_malloc: total=86304 free=71200 min_free=68400 largest=65536
 I mxr_malloc: desc dram=42/256 iram=3/128 max_active=45
 I mxr_malloc: exec=3 iram_fb=2 cross=0 cross_skip=0 guard_rej=0 caps_skip=0 free_skip=0 cache_skip=0
 I mxr_malloc: insert_fail: bounds=0 overlap=0 dup=0 table_full=0
-I  mxr_malloc: region_init=ok iram_fb_init=ok
-I  mxr_malloc: DRAM frag: pct=12% gaps=6 slivers=2(33%) bf_early=31 anti_sliver=2
+I mxr_malloc: region_init=ok iram_fb_init=ok
+I mxr_malloc: DRAM frag: pct=12% gaps=6 slivers=2(33%) bf_early=31 anti_sliver=2
 I mxr_malloc: DRAM: base=0x3ffe9a10 total=78832 free=71200 min_free=68400
 I mxr_malloc: IRAM: base=0x4010a230 total=7472 free=5424 min_free=5424 fb_zone=5424 exec_zone=2048 exec_free=1920 exec_rejects=0
-I  mxr_malloc: iram_fb 0: start=2048 total=5424 min=4 max=-1 free=5424 min_free=5424 largest=5424 alloc=2
+I mxr_malloc: iram_fb 0: start=2048 total=5424 min=4 max=-1 free=5424 min_free=5424 largest=5424 alloc=2
 I mxr_malloc: region 0: caps=0x0000080e start=0     total=9456  min=4    max=127  ...
 I mxr_malloc: region 1: caps=0x0000080e start=9456  total=11032 min=128  max=255  ...
 I mxr_malloc: region 2: caps=0x0000080e start=20488 total=7880  min=256  max=511  ...
 I mxr_malloc: region 3: caps=0x0000080e start=28368 total=19708 min=512  max=1279 ...
-I mxr_malloc:     region 4: caps=0x0000080e start=48076 total=30756 min=1280 max=-1   ...
+I mxr_malloc: region 4: caps=0x0000080e start=48076 total=30756 min=1280 max=-1   ...
 I mxr_malloc: stats: fail_mem=0 fail_table=0 invalid_free=0
 ```
 
