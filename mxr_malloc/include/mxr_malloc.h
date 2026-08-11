@@ -95,12 +95,12 @@ extern "C"
 #else
 #define MXR_MIN_SLICE_BYTES CONFIG_MXR_MIN_SLICE_BYTES
 #endif
-/* Активная проверка: хвост меньше порога → осколок */
-#define MXR_IS_SLIVER(x) ((uint32_t)(x) < (uint32_t)MXR_MIN_SLICE_BYTES)
+/* FIX(4.1): waste == 0 больше не считается sliver.
+   Иначе exact-fit попадал в anti_sliver_expansions. */
+#define MXR_IS_SLIVER(x) \
+    ((uint32_t)(x) > 0 && (uint32_t)(x) < (uint32_t)MXR_MIN_SLICE_BYTES)
 #else
 #define MXR_MIN_SLICE_BYTES 0
-/* Выключено: аргумент макроса не раскрывается в код —
- * сравнение не генерируется вообще, предупреждений нет. */
 #define MXR_IS_SLIVER(x) ((void)(x), 0)
 #endif
 
@@ -132,16 +132,16 @@ extern "C"
    проверка max_bytes в mxr_try_cross_region() пропускается. */
 #elif defined(CONFIG_MXR_DRAM_CROSS_CONSERVATIVE)
 /* Conservative: 50% GUARD */
-#define MXR_DRAM_GUARD_NUM 1
-#define MXR_DRAM_GUARD_DEN 2
+#define MXR_DRAM_GUARD_NUM 1ul
+#define MXR_DRAM_GUARD_DEN 2ul
 #elif defined(CONFIG_MXR_DRAM_CROSS_AGGRESSIVE)
 /* Aggressive: 90% GUARD */
-#define MXR_DRAM_GUARD_NUM 9
-#define MXR_DRAM_GUARD_DEN 10
+#define MXR_DRAM_GUARD_NUM 9ul
+#define MXR_DRAM_GUARD_DEN 10ul
 #else
 /* Moderate (default): 75% GUARD */
-#define MXR_DRAM_GUARD_NUM 3
-#define MXR_DRAM_GUARD_DEN 4
+#define MXR_DRAM_GUARD_NUM 3ul
+#define MXR_DRAM_GUARD_DEN 4ul
 #endif
 #endif /* CROSS_REGION_FALLBACK && DRAM_CROSS_ENABLED */
 
@@ -154,14 +154,14 @@ extern "C"
 #if defined(CONFIG_MXR_IRAM_CROSS_ALL)
 /* All: MXR_IRAM_GUARD_NUM/DEN намеренно НЕ определены */
 #elif defined(CONFIG_MXR_IRAM_CROSS_CONSERVATIVE)
-#define MXR_IRAM_GUARD_NUM 1
-#define MXR_IRAM_GUARD_DEN 2
+#define MXR_IRAM_GUARD_NUM 1ul
+#define MXR_IRAM_GUARD_DEN 2ul
 #elif defined(CONFIG_MXR_IRAM_CROSS_AGGRESSIVE)
-#define MXR_IRAM_GUARD_NUM 9
-#define MXR_IRAM_GUARD_DEN 10
+#define MXR_IRAM_GUARD_NUM 9ul
+#define MXR_IRAM_GUARD_DEN 10ul
 #else
-#define MXR_IRAM_GUARD_NUM 3
-#define MXR_IRAM_GUARD_DEN 4
+#define MXR_IRAM_GUARD_NUM 3ul
+#define MXR_IRAM_GUARD_DEN 4ul
 #endif
 #endif /* CROSS_REGION_FALLBACK && IRAM_CROSS_ENABLED && USE_IRAM */
 
@@ -176,13 +176,13 @@ extern "C"
 #if defined(CONFIG_MXR_CROSS_REGION_FALLBACK) && \
     defined(CONFIG_MXR_DRAM_CROSS_ENABLED)
 #if defined(CONFIG_MXR_DRAM_CROSS_MIN_BYTES_CONSERVATIVE)
-#define MXR_DRAM_MIN_BYTES_DIVISOR 1
+#define MXR_DRAM_MIN_BYTES_DIVISOR 1ul
 #elif defined(CONFIG_MXR_DRAM_CROSS_MIN_BYTES_AGGRESSIVE)
-#define MXR_DRAM_MIN_BYTES_DIVISOR 4
+#define MXR_DRAM_MIN_BYTES_DIVISOR 4ul
 #elif defined(CONFIG_MXR_DRAM_CROSS_MIN_BYTES_ALL)
 /* Disabled: макрос намеренно НЕ определён */
 #else /* MODERATE (default) */
-#define MXR_DRAM_MIN_BYTES_DIVISOR 2
+#define MXR_DRAM_MIN_BYTES_DIVISOR 2ul
 #endif
 #endif /* CROSS_REGION_FALLBACK && !DRAM_CROSS_DISABLED */
 
@@ -193,13 +193,13 @@ extern "C"
     defined(CONFIG_MXR_IRAM_CROSS_ENABLED) &&    \
     defined(CONFIG_MXR_USE_IRAM)
 #if defined(CONFIG_MXR_IRAM_CROSS_MIN_BYTES_CONSERVATIVE)
-#define MXR_IRAM_MIN_BYTES_DIVISOR 1
+#define MXR_IRAM_MIN_BYTES_DIVISOR 1ul
 #elif defined(CONFIG_MXR_IRAM_CROSS_MIN_BYTES_AGGRESSIVE)
-#define MXR_IRAM_MIN_BYTES_DIVISOR 4
+#define MXR_IRAM_MIN_BYTES_DIVISOR 4ul
 #elif defined(CONFIG_MXR_IRAM_CROSS_MIN_BYTES_ALL)
 /* Disabled: макрос намеренно НЕ определён */
 #else /* MODERATE (default) */
-#define MXR_IRAM_MIN_BYTES_DIVISOR 2
+#define MXR_IRAM_MIN_BYTES_DIVISOR 2ul
 #endif
 #endif /* CROSS_REGION_FALLBACK && !IRAM_CROSS_DISABLED && USE_IRAM */
 
@@ -279,6 +279,13 @@ typedef uint32_t mxr_count_t;
 
   _Static_assert(sizeof(mxr_desc_t) == 8, "desc must be 8 bytes");
 
+
+  /* Запрет 64-битных операций в IRAM-коде — они генерируют
+   вызовы __muldi3/__udivdi3 из flash, что недопустимо
+   при отключённом flash cache */
+#ifdef CONFIG_MXR_USE_IRAM
+#pragma GCC poison __muldi3 __udivdi3 __umulsidi3
+#endif
   /* ================================================================
    *  Region configuration (build-time)
    * ================================================================ */
@@ -357,12 +364,26 @@ typedef uint32_t mxr_count_t;
     uint32_t alloc_fail_no_memory;
     uint32_t alloc_fail_table_full;
     uint32_t invalid_free_attempts;
+    uint32_t region_lookup_failures;
     uint32_t cross_region_skip_fragmented;
     uint32_t fragmentation_pct;      /* (free - largest) / free * 100 */
     uint32_t gap_count;              /* количество свободных gaps */
     uint32_t sliver_count;           /* gaps < MXR_MIN_SLICE_BYTES */
     uint32_t best_fit_early_exits;   /* сколько раз best-fit сработал рано */
     uint32_t anti_sliver_expansions; /* сколько раз блок расширен до полного gap */
+      /* FIX(3.2): причины пропуска cross-region */
+     uint32_t cross_caps_skips;
+     uint32_t cross_free_skips;
+     uint32_t cross_cache_skips;
+
+     /* FIX(3.3): причины отказа вставки дескриптора */
+     uint32_t desc_insert_fail_bounds;
+     uint32_t desc_insert_fail_overlap;
+     uint32_t desc_insert_fail_duplicate;
+
+     /* FIX(4.3): region init fallback */
+     bool region_init_fallback;
+     bool iram_fb_region_init_fallback;
   } mxr_status_t;
 
   /* ДОБАВЛЕНО: проверка кратности 4 для mxr_memset4 */

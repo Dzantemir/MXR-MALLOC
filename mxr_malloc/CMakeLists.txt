@@ -195,3 +195,10 @@ if(CONFIG_MXR_INTEGRATION_WRAP)
     endif()
     target_link_libraries(${COMPONENT_LIB} INTERFACE ${MXR_WRAP_FLAGS})
 endif()
+if(CONFIG_MXR_INTEGRATION_PORT)
+    message(WARNING
+        "MxR-malloc: PORT mode defines malloc/free/calloc/realloc/zalloc "
+        "directly. Ensure original newlib/libc implementations are excluded "
+        "from the build, otherwise duplicate symbol errors will occur."
+    )
+endif()

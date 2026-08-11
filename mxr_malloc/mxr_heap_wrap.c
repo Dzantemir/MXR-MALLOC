@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "esp_attr.h"
 #include <string.h>
+#include "esp_log.h"
 
 #ifndef IRAM_ATTR
 #define IRAM_ATTR
@@ -23,19 +24,19 @@
 /* ================================================================
  *  Base wraps
  * ================================================================ */
-void __wrap_heap_caps_init(void)
+void  __wrap_heap_caps_init(void)
 {
     mxr_init();
 }
 
-void *MXR_WRAP_IRAM __wrap__heap_caps_malloc(
+void *  MXR_WRAP_IRAM __wrap__heap_caps_malloc(
     size_t size, uint32_t caps, const char *file, size_t line)
 {
     (void)file; (void)line;
     return mxr_malloc_caps(size, caps);
 }
 
-void MXR_WRAP_IRAM __wrap__heap_caps_free(
+void  MXR_WRAP_IRAM __wrap__heap_caps_free(
     void *ptr, const char *file, size_t line)
 {
     (void)file; (void)line;

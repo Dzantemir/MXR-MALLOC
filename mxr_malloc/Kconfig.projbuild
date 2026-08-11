@@ -251,10 +251,27 @@ menu "MxR-Malloc"
                 NULL and increments exec_zone_rejects.
 
             Recommended default: 2048.
+    
+    config MXR_IRAM_FALLBACK_ENABLED
+        bool "Enable 32BIT fallback into IRAM (non-EXEC)"
+        depends on MXR_USE_IRAM
+        default y
+        help
+            If enabled, pure 32-bit allocations such as malloc(),
+            _malloc_r(), heap_caps_malloc(size, MALLOC_CAP_32BIT)
+            and heap_caps_malloc(size, 0) may be placed into the
+            IRAM fallback zone.
+
+            If disabled, MALLOC_CAP_EXEC allocations still use the
+            EXEC zone, but all non-EXEC 32-bit allocations are forced
+            to DRAM.
+
+            Disable this if you do not need IRAM for data and want to
+            avoid the risk of byte/half-word accesses to IRAM memory.
 
     config MXR_IRAM_FALLBACK_MAX_BYTES
         int "Maximum block size for IRAM fallback"
-        depends on MXR_USE_IRAM
+        depends on MXR_USE_IRAM && MXR_IRAM_FALLBACK_ENABLED
         range 0 65536
         default 0
         help
@@ -273,7 +290,7 @@ menu "MxR-Malloc"
     # ============================================================
     config MXR_IRAM_FALLBACK_REGION_CONFIG
         string "IRAM fallback region layout"
-        depends on MXR_USE_IRAM
+        depends on MXR_USE_IRAM && MXR_IRAM_FALLBACK_ENABLED
         default "4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
         help
             Configures size-class regions inside the IRAM fallback zone.
@@ -432,6 +449,7 @@ menu "MxR-Malloc"
         bool "Enabled - use cross-region fallback for IRAM"
         depends on MXR_CROSS_REGION_FALLBACK
         depends on MXR_USE_IRAM
+        depends on MXR_IRAM_FALLBACK_ENABLED
         default y
         help
             Enables cross-region fallback inside the IRAM fallback zone.
