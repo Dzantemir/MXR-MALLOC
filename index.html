@@ -817,7 +817,7 @@
         iramDiv: +document.getElementById('cfgIramDiv').value,
       };
     }
-    function isSliver(x) { return cfg.antiSliver && (x >>> 0) < cfg.minSlice; }
+    function isSliver(x) { return cfg.antiSliver && (x >>> 0) > 0 && (x >>> 0) < cfg.minSlice; }
     function wasteLimitFor(bytes) {
       if (cfg.earlyExit) return Math.max(bytes >>> cfg.wasteShift, ALIGN);
       return 0;
@@ -1010,7 +1010,11 @@
           execAllocs: 0, iramFallbackAllocs: 0, crossAllocs: 0,
           execZoneRejects: 0, guardRej: 0,
           failNoMem: 0, failTableFull: 0, invalidFree: 0, crossSkipFrag: 0,
-          fragPct: 0, gapCount: 0, sliverCount: 0, earlyExits: 0, antiSliverExp: 0
+          fragPct: 0, gapCount: 0, sliverCount: 0, earlyExits: 0, antiSliverExp: 0,
+          crossCapsSkips: 0, crossFreeSkips: 0, crossCacheSkips: 0,
+          insertFailBounds: 0, insertFailOverlap: 0, insertFailDup: 0,
+          regionInitFallback: false, iramFbInitFallback: false,
+          regionLookupFailures: 0
         }
       };
       S.dram.freeBytes = S.dram.total; S.dram.minFreeBytes = S.dram.total;
@@ -1028,6 +1032,7 @@
           try { initIramFbRegions(); S.iram.enabled = true; }
           catch (e) {
             tr(`IRAM fb init: ${e} — falling back to a single flat region`, 't-warn');
+            S.stats.iramFbInitFallback = true;
             S.iram.fbRegions = [{
               caps: CAP_32BIT | CAP_INTERNAL, start_byte: S.iram.fbZoneStart,
               total_bytes: S.iram.fbZoneTotal, min_bytes: ALIGN, max_bytes: UNLIMITED,
@@ -1046,12 +1051,13 @@
         errEl.textContent = e;
         tr(`region init failed (${e}) — using single flat region`, 't-warn');
         S.dram.regions = initRegionsTempSingle(S.dram.total);
+        S.stats.regionInitFallback = true;
       }
       let totalBytes = S.dram.total, freeBytes = S.dram.total, largest = 0;
       for (const r of S.dram.regions) if (r.total_bytes > largest) largest = r.total_bytes;
       if (S.iram.enabled) {
         totalBytes += S.iram.total; freeBytes += S.iram.total;
-        const il = iramLargestFree(); if (il > largest) largest = il;
+        const il = iramLargestZoneAware(); if (il > largest) largest = il;
       }
       const st = S.stats;
       st.initialized = true; st.regionCount = S.dram.regions.length;
@@ -1081,15 +1087,15 @@
       return -1;
     }
     function descInsert(descs, cap, off, len, exec) {
-      if (off > MAX_LEN) return { ok: false, r: 'off > MAX_OFFSET' };
-      if (len === 0 || len > MAX_LEN) return { ok: false, r: 'len invalid' };
+      if (off > MAX_LEN) { S.stats.insertFailBounds++; return { ok: false, r: 'off > MAX_OFFSET' }; }
+      if (len === 0 || len > MAX_LEN) { S.stats.insertFailBounds++; return { ok: false, r: 'len invalid' }; }
       if (descs.length >= cap) { S.stats.failTableFull++; return { ok: false, r: 'descriptor table full (alloc_fail_table_full++)' }; }
       let l = 0, r = descs.length;
       while (l < r) { const m = (l + r) >> 1; if (descs[m].off < off) l = m + 1; else r = m; }
       const pos = l;
-      if (pos < descs.length && descs[pos].off === off) return { ok: false, r: 'duplicate offset' };
-      if (pos > 0) { const p = descs[pos - 1]; if (p.off + p.len > off) return { ok: false, r: 'overlap with previous block' }; }
-      if (pos < descs.length) { if (off + len > descs[pos].off) return { ok: false, r: 'overlap with next block' }; }
+      if (pos < descs.length && descs[pos].off === off) { S.stats.insertFailDup++; return { ok: false, r: 'duplicate offset' }; }
+      if (pos > 0) { const p = descs[pos - 1]; if (p.off + p.len > off) { S.stats.insertFailOverlap++; return { ok: false, r: 'overlap with previous block' }; } }
+      if (pos < descs.length) { if (off + len > descs[pos].off) { S.stats.insertFailOverlap++; return { ok: false, r: 'overlap with next block' }; } }
       descs.splice(pos, 0, { off, len, exec: !!exec });
       const totalActive = S.dram.desc.length + S.iram.desc.length;
       if (totalActive > S.stats.maxActive) S.stats.maxActive = totalActive;
@@ -1104,16 +1110,14 @@
       return -1;
     }
     function regionForSize(len, caps) {
-      let firstCaps = -1;
       for (let i = 0; i < S.dram.regions.length; i++) {
         const r = S.dram.regions[i];
         if ((r.caps & caps) !== caps) continue;
-        if (firstCaps < 0) firstCaps = i;
         if (len < r.min_bytes) continue;
         if (r.max_bytes !== UNLIMITED && len > r.max_bytes) continue;
         return i;
       }
-      return firstCaps;
+      return -1;
     }
     function regionCapsOk(i, caps) { return i >= 0 && i < S.dram.regions.length && ((S.dram.regions[i].caps & caps) === caps); }
     function regionSizeOk(i, b) {
@@ -1221,6 +1225,8 @@
     }
     function tryAllocRegion(ri, bytes) {
       const reg = S.dram.regions[ri];
+      if (bytes < reg.min_bytes) return null;
+      if (reg.max_bytes !== UNLIMITED && bytes > reg.max_bytes) return null;
       if (reg.free_bytes < bytes) { tr(`    region ${ri}: free_bytes ${reg.free_bytes} < ${bytes}`); return null; }
       if (reg.cache_valid && reg.largest_cache < bytes) {
         tr(`    region ${ri}: largest_cache=${reg.largest_cache} < ${bytes} → skipped (cache)`, 't-hit'); return null;
@@ -1245,9 +1251,9 @@
       tr(`  DRAM cross-region: scan order [${order.join(',')}], max-bytes GUARD=${g ? g[0] + '/' + g[1] : 'ALL (off)'}, minDiv=${cfg.dramDiv || 'ALL'}`);
       for (const i of order) {
         const r = S.dram.regions[i];
-        if (!regionCapsOk(i, caps)) continue;
-        if (r.free_bytes < bytes) continue;
-        if (r.cache_valid && r.largest_cache < bytes) { tr(`    cross: region ${i} skipped by largest cache`, 't-hit'); continue; }
+        if (!regionCapsOk(i, caps)) { S.stats.crossCapsSkips++; continue; }
+        if (r.free_bytes < bytes) { S.stats.crossFreeSkips++; continue; }
+        if (r.cache_valid && r.largest_cache < bytes) { S.stats.crossCacheSkips++; tr(`    cross: region ${i} skipped by largest cache`, 't-hit'); continue; }
         if (g && r.max_bytes !== UNLIMITED && bytes > Math.floor(r.max_bytes * g[0] / g[1])) {
           S.stats.guardRej++;
           tr(`    cross: region ${i} — GUARD reject: ${bytes} > max ${r.max_bytes}×${g[0]}/${g[1]} (cross_guard_rej++)`); continue;
@@ -1284,7 +1290,16 @@
         if (r.max_bytes !== UNLIMITED && bytes > r.max_bytes) continue;
         return i;
       }
-      return S.iram.fbRegions.length > 0 ? 0 : -1;
+      if (S.iram.fbRegions.length > 0) {
+        const last = S.iram.fbRegions.length - 1;
+        if (bytes >= S.iram.fbRegions[last].min_bytes &&
+          (S.iram.fbRegions[last].max_bytes === UNLIMITED || bytes <= S.iram.fbRegions[last].max_bytes))
+          return last;
+        if (bytes >= S.iram.fbRegions[0].min_bytes &&
+          (S.iram.fbRegions[0].max_bytes === UNLIMITED || bytes <= S.iram.fbRegions[0].max_bytes))
+          return 0;
+      }
+      return -1;
     }
     function iramFbRegionSizeOk(reg, b) {
       if (reg < 0 || reg >= S.iram.fbRegions.length) return false;
@@ -1406,8 +1421,8 @@
       tr(`  IRAM fb cross-region: scan order [${order.join(',')}], max-bytes GUARD=${g ? g[0] + '/' + g[1] : 'ALL (off)'}, minDiv=${cfg.iramDiv || 'ALL'}`);
       for (const i of order) {
         const r = S.iram.fbRegions[i];
-        if (r.free_bytes < bytes) continue;
-        if (r.cache_valid && r.largest_cache < bytes) { tr(`    iram cross: region ${i} skipped by cache`, 't-hit'); continue; }
+        if (r.free_bytes < bytes) { S.stats.crossFreeSkips++; continue; }
+        if (r.cache_valid && r.largest_cache < bytes) { S.stats.crossCacheSkips++; tr(`    iram cross: region ${i} skipped by cache`, 't-hit'); continue; }
         if (g && r.max_bytes !== UNLIMITED && bytes > Math.floor(r.max_bytes * g[0] / g[1])) {
           S.stats.guardRej++;
           tr(`    iram cross: region ${i} — GUARD reject (cross_guard_rej++)`); continue;
@@ -1483,15 +1498,30 @@
       }
       else iramFbRegionReleased(iramFbRegionByOff(off), bytes, countBlock);
     }
-    function iramLargestFree() {
+    function iramExecLargestFree() {
       if (!S.iram.enabled) return 0;
-      let cur = 0, largest = 0; const end = S.iram.total;
+      const zoneEnd = iramExecZoneEnd();
+      if (zoneEnd === 0) return 0;
+      let cur = 0, largest = 0;
       for (const d of S.iram.desc) {
+        const be = d.off + d.len;
+        if (d.off >= zoneEnd) break;
         if (d.off > cur && d.off - cur > largest) largest = d.off - cur;
-        if (d.off + d.len > cur) cur = d.off + d.len;
-        if (cur >= end) break;
+        if (be > cur) cur = be;
+        if (cur >= zoneEnd) break;
       }
-      if (end > cur && end - cur > largest) largest = end - cur;
+      if (zoneEnd > cur && zoneEnd - cur > largest) largest = zoneEnd - cur;
+      return largest;
+    }
+    function iramLargestZoneAware() {
+      if (!S.iram.enabled) return 0;
+      let largest = iramExecLargestFree();
+      for (let i = 0; i < S.iram.fbRegions.length; i++) {
+        let lr = iramFbRegionLargest(i);
+        const ma = S.iram.fbRegions[i].max_bytes;
+        if (ma !== UNLIMITED && lr > ma) lr = ma;
+        if (lr > largest) largest = lr;
+      }
       return largest;
     }
 
@@ -1559,6 +1589,10 @@
             tr(`    step 1: fb region ${fbReg} [${r.min_bytes}..${r.max_bytes || '∞'}], last-fit`);
             const res = iramFbFindFreeInRegion(fbReg, bytes);
             if (res) { found = true; off = res.off; allocBytes = res.alloc; }
+            else {
+              r.largest_cache = iramFbRegionLargest(fbReg);
+              r.cache_valid = 1;
+            }
           }
           if (found) {
             const ins = descInsert(S.iram.desc, cfg.iramMaxDesc, off, allocBytes, false);
@@ -1644,8 +1678,14 @@
         const len = S.dram.desc[idx].len;
         const reg = regionByOff(off);
         S.dram.desc.splice(idx, 1);
-        if (reg >= 0 && S.dram.regions[reg].alloc_count > 0) S.dram.regions[reg].alloc_count--;
-        regionReleased(reg, len);
+        if (reg >= 0) {
+          if (S.dram.regions[reg].alloc_count > 0) S.dram.regions[reg].alloc_count--;
+          regionReleased(reg, len);
+        } else {
+          S.dram.freeBytes = Math.min(S.dram.total, S.dram.freeBytes + len);
+          S.stats.freeBytes = Math.min(S.stats.totalBytes, S.stats.freeBytes + len);
+          S.stats.regionLookupFailures++;
+        }
         tr(`  DRAM free: @${off} len ${len}, region ${reg} — gap auto-merges with neighbors (no free lists)`, 't-ok');
       } else {
         const off = ptr - IRAM_BASE;
@@ -1751,7 +1791,7 @@
             return ptr;
           }
           S.iram.desc[idx].len = newBytes;
-          iramReleased(off + newBytes, diff, oldExec, false);
+          iramReleased(off, diff, oldExec, false);
           tr('  IRAM shrink in-place', 't-ok');
           return ptr;
         }
@@ -1869,7 +1909,7 @@
         st.iramExecZoneTotal = iramExecZoneEnd();
         st.iramExecZoneFree = S.iram.execFree;
         st.iramExecZoneMinFree = S.iram.execMinFree;
-        const il = iramLargestFree(); if (il > largest) largest = il;
+        const il = iramLargestZoneAware(); if (il > largest) largest = il;
       }
       const trackedFree = st.freeBytes, trackedTotal = st.totalBytes;
       st.totalBytes = total; st.freeBytes = free; st.largest = largest;
@@ -1902,7 +1942,11 @@
         }
         else if ((caps & CAP_32BIT) && !(caps & (CAP_DMA | CAP_8BIT | CAP_SPIRAM))) {
           for (const r of S.iram.fbRegions) bytes += r.free_bytes;
-        } else if (caps === 0) bytes += S.iram.freeBytes;
+        } else if ((caps & CAP_INTERNAL) && !(caps & (CAP_DMA | CAP_8BIT | CAP_SPIRAM))) {
+          for (const r of S.iram.fbRegions) bytes += r.free_bytes;
+        } else if (caps === 0) {
+          for (const r of S.iram.fbRegions) bytes += r.free_bytes;
+        }
       }
       return bytes;
     }
@@ -1916,7 +1960,11 @@
         }
         else if ((caps & CAP_32BIT) && !(caps & (CAP_DMA | CAP_8BIT | CAP_SPIRAM))) {
           for (const r of S.iram.fbRegions) bytes += r.min_free_bytes;
-        } else if (caps === 0) bytes += S.iram.minFreeBytes;
+        } else if ((caps & CAP_INTERNAL) && !(caps & (CAP_DMA | CAP_8BIT | CAP_SPIRAM))) {
+          for (const r of S.iram.fbRegions) bytes += r.min_free_bytes;
+        } else if (caps === 0) {
+          for (const r of S.iram.fbRegions) bytes += r.min_free_bytes;
+        }
       }
       return bytes;
     }
@@ -2071,6 +2119,9 @@
         ['dram desc', `${st.dramActive}/${st.dramDescCapacity}`], ['iram desc', `${st.iramActive}/${st.iramDescCapacity}`], ['max_active', st.maxActive],
         ['exec_allocs', st.execAllocs], ['exec_zone_rej', st.execZoneRejects], ['iram_fallback', st.iramFallbackAllocs],
         ['cross_region', st.crossAllocs], ['cross_guard_rej', st.guardRej], ['cross_skip_frag', st.crossSkipFrag],
+        ['cross_caps_skips', st.crossCapsSkips], ['cross_free_skips', st.crossFreeSkips], ['cross_cache_skips', st.crossCacheSkips],
+        ['insert_fail b/o/d', `${st.insertFailBounds}/${st.insertFailOverlap}/${st.insertFailDup}`],
+        ['region_init', st.regionInitFallback ? 'FALLBACK' : 'ok'], ['iram_fb_init', st.iramFbInitFallback ? 'FLAT' : 'ok'],
         ['early_exits', st.earlyExits], ['anti_sliver_exp', st.antiSliverExp], ['fail_no_mem', st.failNoMem],
         ['fail_table_full', st.failTableFull], ['invalid_free', st.invalidFree], ['iram total/free', S.iram.enabled ? `${st.iramTotal}/${st.iramFree}` : '—'],
         ['min_free(8BIT)', getMinFreeSizeCaps(CAP_8BIT)], ['min_free(32BIT)', getMinFreeSizeCaps(CAP_32BIT)], ['min_free(EXEC)', getMinFreeSizeCaps(CAP_EXEC)],
