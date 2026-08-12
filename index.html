@@ -500,6 +500,16 @@
               step="256"></div>
           <div class="row"><label>IRAM_FALLBACK_MAX (0=unltd)</label><input type="number" id="cfgFbMax" value="0"
               min="0"></div>
+          <div class="row"><label>IRAM fallback order</label>
+            <select id="cfgIramOrder">
+              <option value="dram_first" selected>DRAM first (recommended)</option>
+              <option value="iram_first">IRAM first (original MxR)</option>
+            </select>
+          </div>
+          <div class="row"><label><input type="checkbox" id="cfgIramFbEnabled" checked>
+              CONFIG_MXR_IRAM_FALLBACK_ENABLED</label></div>
+          <div class="row"><label><input type="checkbox" id="cfgExecWhole" checked> MXR_IRAM_EXEC_WHOLE_IF_NO_FB (when
+              fb off)</label></div>
           <p class="hint">EXEC zone = [0, reserve). EXEC blocks never leave it. reserve = 0 → EXEC allocations are
             rejected entirely.</p>
         </div>
@@ -815,6 +825,9 @@
         iramCrossEn: document.getElementById('cfgIramCrossEn').checked,
         iramCross: document.getElementById('cfgIramCross').value,
         iramDiv: +document.getElementById('cfgIramDiv').value,
+        iramOrder: document.getElementById('cfgIramOrder').value,
+        iramFbEnabled: document.getElementById('cfgIramFbEnabled').checked,
+        execWhole: document.getElementById('cfgExecWhole').checked,
       };
     }
     function isSliver(x) { return cfg.antiSliver && (x >>> 0) > 0 && (x >>> 0) < cfg.minSlice; }
@@ -841,7 +854,6 @@
       // CONFIG_MXR_USE_IRAM children
       document.getElementById('iramArenaGroup').style.display = useIram ? '' : 'none';
       document.getElementById('rowIramMaxDesc').style.display = useIram ? '' : 'none';
-      document.getElementById('iramRegionsGroup').style.display = useIram ? '' : 'none';
 
       // MXR_ANTI_SLIVER child
       document.getElementById('rowMinSlice').style.display = antiSliver ? '' : 'none';
@@ -858,6 +870,11 @@
       // IRAM cross enable row needs master + USE_IRAM; its guards need IRAM enabled too
       document.getElementById('iramCrossEnGroup').style.display = (cross && useIram) ? '' : 'none';
       document.getElementById('iramCrossGroup').style.display = (cross && useIram && iramCrossEn) ? '' : 'none';
+      const fbEn = document.getElementById('cfgIramFbEnabled').checked;
+      document.getElementById('cfgIramOrder').closest('.row').style.display = (useIram && fbEn) ? '' : 'none';
+      document.getElementById('iramRegionsGroup').style.display = (useIram && fbEn) ? '' : 'none';  // ← ИСПРАВЛЕНО
+      document.getElementById('cfgExecWhole').closest('.row').style.display = (useIram && !fbEn) ? '' : 'none';
+      document.getElementById('cfgFbMax').closest('.row').style.display = (useIram && fbEn) ? '' : 'none';
     }
 
     /* ---------- state ---------- */
@@ -1025,8 +1042,22 @@
         } else {
           S.iram.total = bytes; S.iram.freeBytes = bytes; S.iram.minFreeBytes = bytes;
           const reserve = cfg.reserve;
-          if (reserve >= bytes) { S.iram.fbZoneStart = bytes; S.iram.fbZoneTotal = 0; }
-          else { S.iram.fbZoneStart = reserve; S.iram.fbZoneTotal = bytes - reserve; }
+          if (!cfg.iramFbEnabled) {
+            if (cfg.execWhole) {
+              S.iram.fbZoneStart = bytes;   // EXEC zone = whole IRAM
+              S.iram.fbZoneTotal = 0;
+            } else {
+              const r2 = Math.min(reserve, bytes);
+              S.iram.fbZoneStart = r2;
+              S.iram.fbZoneTotal = 0;
+              bytes = r2; S.iram.total = r2;  // truncate arena
+              S.iram.freeBytes = r2; S.iram.minFreeBytes = r2;
+            }
+          } else if (reserve >= bytes) {
+            S.iram.fbZoneStart = bytes; S.iram.fbZoneTotal = 0;
+          } else {
+            S.iram.fbZoneStart = reserve; S.iram.fbZoneTotal = bytes - reserve;
+          }
           S.iram.execFree = S.iram.fbZoneStart;
           S.iram.execMinFree = S.iram.fbZoneStart;
           try { initIramFbRegions(); S.iram.enabled = true; }
@@ -1172,7 +1203,7 @@
         if (gap >= bytes) {
           const waste = gap - bytes;
           if (waste <= wLimit) {
-            if (cfg.earlyExit) S.stats.earlyExits++;
+            S.stats.earlyExits++;
             tr(`    gap @${gapStart} size ${gap}: waste ${waste} <= limit ${wLimit} → EARLY EXIT`, 't-hit');
             const alloc = sliverExpand(gap, waste, maxAllowed, bytes, 'find_best_free', 'dram', label);
             return { stop: true, off: gapStart, alloc, largest, exact: false };
@@ -1290,16 +1321,7 @@
         if (r.max_bytes !== UNLIMITED && bytes > r.max_bytes) continue;
         return i;
       }
-      if (S.iram.fbRegions.length > 0) {
-        const last = S.iram.fbRegions.length - 1;
-        if (bytes >= S.iram.fbRegions[last].min_bytes &&
-          (S.iram.fbRegions[last].max_bytes === UNLIMITED || bytes <= S.iram.fbRegions[last].max_bytes))
-          return last;
-        if (bytes >= S.iram.fbRegions[0].min_bytes &&
-          (S.iram.fbRegions[0].max_bytes === UNLIMITED || bytes <= S.iram.fbRegions[0].max_bytes))
-          return 0;
-      }
-      return -1;
+      return -1; // no implicit fallback — matches FIX in mxr_malloc.c
     }
     function iramFbRegionSizeOk(reg, b) {
       if (reg < 0 || reg >= S.iram.fbRegions.length) return false;
@@ -1310,13 +1332,15 @@
     }
     function capsAllowIramFallback(caps) {
       if (!S.iram.enabled) return false;
+      if (!cfg.iramFbEnabled) return false;
       if (caps & CAP_EXEC) return false;
       if (caps & (CAP_DMA | CAP_8BIT | CAP_SPIRAM)) return false;
-      if ((caps & CAP_32BIT) || caps === 0) return true;
+      if ((caps & CAP_32BIT) || (caps & CAP_INTERNAL) || caps === 0) return true;
       return false;
     }
     function iramCanFallback(bytes) {
       if (!S.iram.enabled) return false;
+      if (!cfg.iramFbEnabled) return false;
       if (S.iram.fbZoneTotal === 0) return false;
       if (S.iram.desc.length >= cfg.iramMaxDesc) return false;
       if (cfg.fbMax !== 0 && bytes > cfg.fbMax) return false;
@@ -1335,7 +1359,7 @@
       const zoneEnd = iramExecZoneEnd();
       if (zoneEnd === 0) return null;
       if (bytes > zoneEnd) return null;
-      if (S.iram.freeBytes < bytes) return null;
+      if (S.iram.execFree < bytes) return null;
       let cur = 0;
       for (const d of S.iram.desc) {
         const off = d.off, be = off + d.len;
@@ -1353,37 +1377,41 @@
       const rs = r.start_byte, re = fbRegionEnd(reg), maxAllowed = r.max_bytes;
       const label = 'IRAM fb r' + reg;
       if (r.free_bytes < bytes) return null;
-      let candEnd = re;
-      for (let i = S.iram.desc.length - 1; i >= 0; i--) {
-        const d = S.iram.desc[i], be = d.off + d.len;
-        if (be <= rs) break;
-        if (d.off >= re) continue;
-        if (candEnd > be) {
-          const gap = candEnd - be;
-          if (gap >= bytes) {
-            const waste = gap - bytes;
-            if (isSliver(waste) && (maxAllowed === UNLIMITED || gap <= maxAllowed)) {
-              afExpansion('iram', label, bytes, waste, gap, 'iram fb last-fit');
-              return { off: be, alloc: gap };
-            }
-            return { off: candEnd - bytes, alloc: bytes };
-          }
-        }
-        if (d.off < candEnd) candEnd = d.off;
-        if (candEnd <= rs) break;
-      }
-      if (candEnd > rs) {
-        const gap = candEnd - rs;
+      const wLimit = wasteLimitFor(bytes);
+      let cur = rs, bestOff = 0, bestGap = Infinity, found = false;
+      const consider = (gapStart, gap) => {
         if (gap >= bytes) {
           const waste = gap - bytes;
-          if (isSliver(waste) && (maxAllowed === UNLIMITED || gap <= maxAllowed)) {
-            afExpansion('iram', label, bytes, waste, gap, 'iram fb last-fit');
-            return { off: rs, alloc: gap };
+          if (waste <= wLimit) {
+            S.stats.earlyExits++;  // ← перенести СЮДА, до ветвления
+            if (isSliver(waste) && (maxAllowed === UNLIMITED || gap <= maxAllowed)) {
+              afExpansion('iram', label, bytes, waste, gap, 'iram fb best-fit');
+              return { stop: true, off: gapStart, alloc: gap };
+            }
+            return { stop: true, off: gapStart + gap - bytes, alloc: bytes };
           }
-          return { off: candEnd - bytes, alloc: bytes };
+          // best-fit: меньший gap лучше; при равенстве — выше адрес
+          if (!found || gap < bestGap || (gap === bestGap && gapStart > bestOff)) {
+            bestGap = gap; bestOff = gapStart; found = true;
+          }
         }
+        return null;
+      };
+      for (const d of S.iram.desc) {
+        const off = d.off, be = off + d.len;
+        if (be <= rs) continue; if (off >= re) break;
+        if (off > cur) { const r2 = consider(cur, off - cur); if (r2) return r2; }
+        if (be > cur) cur = be;
+        if (cur >= re) break;
       }
-      return null;
+      if (re > cur) { const r2 = consider(cur, re - cur); if (r2) return r2; }
+      if (!found) return null;
+      const waste = bestGap - bytes;
+      if (isSliver(waste) && (maxAllowed === UNLIMITED || bestGap <= maxAllowed)) {
+        afExpansion('iram', label, bytes, waste, bestGap, 'iram fb best-fit');
+        return { off: bestOff, alloc: bestGap };
+      }
+      return { off: bestOff + bestGap - bytes, alloc: bytes }; // top-aligned
     }
     function iramFbFindFreeAndLargest(reg, bytes) {
       if (reg < 0 || reg >= S.iram.fbRegions.length) return { found: false, largest: 0 };
@@ -1391,28 +1419,38 @@
       const rs = r.start_byte, re = fbRegionEnd(reg), maxAllowed = r.max_bytes;
       const label = 'IRAM fb r' + reg;
       if (r.free_bytes < bytes) return { found: false, largest: 0 };
-      let candEnd = re, largest = 0, found = false, outOff = 0, outAlloc = bytes;
-      const consider = (gapStart, gap) => {
-        if (gap > largest) largest = gap;
-        if (!found && gap >= bytes) {
-          const waste = gap - bytes;
-          if (isSliver(waste) && (maxAllowed === UNLIMITED || gap <= maxAllowed)) {
-            afExpansion('iram', label, bytes, waste, gap, 'iram fb cross find');
-            outOff = gapStart; outAlloc = gap;
-          } else { outOff = gapStart + gap - bytes; outAlloc = bytes; }
-          found = true;
+      let cur = rs, largest = 0, found = false, outOff = 0, outAlloc = bytes;
+      let bestGap = Infinity;
+      for (const d of S.iram.desc) {
+        const off = d.off, be = off + d.len;
+        if (be <= rs) continue; if (off >= re) break;
+        if (off > cur) {
+          const gap = off - cur;
+          if (gap > largest) largest = gap;
+          if (gap >= bytes && (!found || gap < bestGap || (gap === bestGap && cur > outOff))) {
+            bestGap = gap; outOff = cur; found = true;
+          }
         }
-      };
-      for (let i = S.iram.desc.length - 1; i >= 0; i--) {
-        const d = S.iram.desc[i], be = d.off + d.len;
-        if (be <= rs) break;
-        if (d.off >= re) continue;
-        if (candEnd > be) consider(be, candEnd - be);
-        if (d.off < candEnd) candEnd = d.off;
-        if (candEnd <= rs) break;
+        if (be > cur) cur = be;
+        if (cur >= re) break;
       }
-      if (candEnd > rs) consider(rs, candEnd - rs);
-      return { found, off: outOff, alloc: outAlloc, largest };
+      if (re > cur) {
+        const gap = re - cur;
+        if (gap > largest) largest = gap;
+        if (gap >= bytes && (!found || gap < bestGap || (gap === bestGap && cur > outOff))) {
+          bestGap = gap; outOff = cur; found = true;
+        }
+      }
+      if (!found) return { found: false, largest, off: 0, alloc: bytes };
+      const waste = bestGap - bytes;
+      if (isSliver(waste) && (maxAllowed === UNLIMITED || bestGap <= maxAllowed)) {
+        afExpansion('iram', label, bytes, waste, bestGap, 'iram fb cross find');
+        outAlloc = bestGap;
+      } else {
+        outOff = outOff + bestGap - bytes; // top-aligned
+        outAlloc = bytes;
+      }
+      return { found: true, off: outOff, alloc: outAlloc, largest };
     }
     function iramFbTryCrossRegion(bytes, skipReg) {
       const n = S.iram.fbRegions.length; if (!n) return null;
@@ -1577,51 +1615,11 @@
         tr(`  EXEC: allocated @IRAM+${off} len ${bytes} (exec_allocs++)`, 't-ok');
         return commitAlloc('iram', off, bytes, caps, 'exec', null, null);
       }
-      if (S.iram.enabled && capsAllowIramFallback(caps) && iramCanFallback(bytes)) {
-        tr('  IRAM fallback path (32BIT without 8BIT/DMA/SPIRAM)');
-        const fbReg = iramFbRegionForSize(bytes);
-        let found = false, off = 0, allocBytes = bytes;
-        if (fbReg >= 0) {
-          const r = S.iram.fbRegions[fbReg];
-          if (r.cache_valid && r.largest_cache < bytes) {
-            tr(`    fb region ${fbReg}: largest cache=${r.largest_cache} < ${bytes} → step 1 skipped`, 't-hit');
-          } else {
-            tr(`    step 1: fb region ${fbReg} [${r.min_bytes}..${r.max_bytes || '∞'}], last-fit`);
-            const res = iramFbFindFreeInRegion(fbReg, bytes);
-            if (res) { found = true; off = res.off; allocBytes = res.alloc; }
-            else {
-              r.largest_cache = iramFbRegionLargest(fbReg);
-              r.cache_valid = 1;
-            }
-          }
-          if (found) {
-            const ins = descInsert(S.iram.desc, cfg.iramMaxDesc, off, allocBytes, false);
-            if (ins.ok) {
-              iramAllocated(off, allocBytes, false, true);
-              S.iram.fallbackAllocs++; S.stats.iramFallbackAllocs++;
-              tr(`    IRAM fb: allocated @IRAM+${off} len ${allocBytes} (iram_fallback_allocs++)`, 't-ok');
-              return commitAlloc('iram', off, allocBytes, caps, 'iram-fb', null, fbReg);
-            }
-            tr('    insert fail: ' + ins.r, 't-warn');
-            found = false;
-          }
-        }
-        if (!found && cfg.cross && cfg.iramCrossEn) {
-          const res = iramFbTryCrossRegion(bytes, fbReg);
-          if (res) {
-            const ins = descInsert(S.iram.desc, cfg.iramMaxDesc, res.off, res.alloc, false);
-            if (ins.ok) {
-              iramAllocated(res.off, res.alloc, false, true);
-              S.iram.fallbackAllocs++; S.stats.iramFallbackAllocs++; S.stats.crossAllocs++;
-              tr(`    IRAM fb cross: allocated @IRAM+${res.off} len ${res.alloc} (from region ${fbReg} → ${res.reg})`, 't-ok');
-              return commitAlloc('iram', res.off, res.alloc, caps, 'iram-fb-cross', fbReg, res.reg);
-            }
-          }
-        } else if (!found && cfg.cross && !cfg.iramCrossEn) {
-          tr('  IRAM fb cross-region: disabled (MXR_IRAM_CROSS_ENABLED=n) → fall through to DRAM');
-        }
-        tr('  IRAM fallback failed → falling through to DRAM');
-      } else if (S.iram.enabled) {
+      if (cfg.iramOrder === 'iram_first' &&
+        S.iram.enabled && capsAllowIramFallback(caps) && iramCanFallback(bytes)) {
+        const p = tryIramFallback(bytes, caps);
+        if (p) return p;
+      } else if (cfg.iramOrder === 'iram_first' && S.iram.enabled) {
         tr('  IRAM fallback skipped (caps include 8BIT/DMA/SPIRAM/EXEC)');
       }
       const region = regionForSize(bytes, caps);
@@ -1643,11 +1641,54 @@
       } else if (cfg.cross && !cfg.dramCrossEn) {
         tr('  DRAM cross-region: disabled (MXR_DRAM_CROSS_ENABLED=n)');
       }
+      if (cfg.iramOrder === 'dram_first' &&
+        S.iram.enabled && capsAllowIramFallback(caps) && iramCanFallback(bytes)) {
+        const p = tryIramFallback(bytes, caps);
+        if (p) return p;
+      }
       S.stats.failNoMem++;
       tr('  OUT OF MEMORY (alloc_fail_no_memory++)', 't-err');
       return null;
     }
-
+    function tryIramFallback(bytes, caps) {
+      tr('  IRAM fallback path (32BIT/INTERNAL, no 8BIT/DMA/SPIRAM)');
+      const fbReg = iramFbRegionForSize(bytes);
+      let found = false, off = 0, allocBytes = bytes;
+      if (fbReg >= 0) {
+        const r = S.iram.fbRegions[fbReg];
+        if (r.cache_valid && r.largest_cache < bytes) {
+          tr(`    fb region ${fbReg}: cache skip`, 't-hit');
+        } else {
+          tr(`    step 1: fb region ${fbReg}, best-fit top-aligned`);
+          const res = iramFbFindFreeInRegion(fbReg, bytes);
+          if (res) { found = true; off = res.off; allocBytes = res.alloc; }
+          else { r.largest_cache = iramFbRegionLargest(fbReg); r.cache_valid = 1; }
+        }
+        if (found) {
+          const ins = descInsert(S.iram.desc, cfg.iramMaxDesc, off, allocBytes, false);
+          if (ins.ok) {
+            iramAllocated(off, allocBytes, false, true);
+            S.iram.fallbackAllocs++; S.stats.iramFallbackAllocs++;
+            tr(`    IRAM fb: allocated @IRAM+${off} len ${allocBytes}`, 't-ok');
+            return commitAlloc('iram', off, allocBytes, caps, 'iram-fb', null, fbReg);
+          }
+          found = false;
+        }
+      }
+      if (!found && cfg.cross && cfg.iramCrossEn) {
+        const res = iramFbTryCrossRegion(bytes, fbReg);
+        if (res) {
+          const ins = descInsert(S.iram.desc, cfg.iramMaxDesc, res.off, res.alloc, false);
+          if (ins.ok) {
+            iramAllocated(res.off, res.alloc, false, true);
+            S.iram.fallbackAllocs++; S.stats.iramFallbackAllocs++; S.stats.crossAllocs++;
+            tr(`    IRAM fb cross: allocated @IRAM+${res.off} len ${res.alloc}`, 't-ok');
+            return commitAlloc('iram', res.off, res.alloc, caps, 'iram-fb-cross', fbReg, res.reg);
+          }
+        }
+      }
+      return null;
+    }
     function opMalloc(size, caps, label) {
       opNo++; opTrace = [];
       tr(`request: size=${size} caps=${capsStr(caps)}`, 't-op');
@@ -1773,14 +1814,29 @@
       const idx = descFindKey(S.iram.desc, off);
       if (idx < 0) { S.stats.invalidFree++; tr('  IRAM realloc: descriptor not found', 't-err'); return null; }
       let oldExec = S.iram.desc[idx].exec;
-      if (oldExec && !(caps & CAP_EXEC)) { caps |= CAP_EXEC; tr('  old block is EXEC → caps forced to EXEC', 't-warn'); }
       const oldBytes = S.iram.desc[idx].len;
+      // УДАЛИТЬ: if (oldExec && !(caps & CAP_EXEC)) { caps |= CAP_EXEC; }
       const wantExec = !!(caps & CAP_EXEC);
       let inPlaceAllowed;
-      if (wantExec) inPlaceAllowed = oldExec && ((caps & ~(CAP_EXEC | CAP_32BIT | CAP_INTERNAL)) === 0);
-      else inPlaceAllowed = !oldExec && capsAllowIramFallback(caps);
+      if (wantExec) {
+        inPlaceAllowed = oldExec && ((caps & ~(CAP_EXEC | CAP_32BIT | CAP_INTERNAL)) === 0);
+      } else if (!oldExec) {
+        inPlaceAllowed = capsAllowIramFallback(caps);
+      } else {
+        inPlaceAllowed = false;
+      }
       tr(`  IRAM realloc: old=${oldBytes} new=${newBytes} exec=${oldExec} inPlaceAllowed=${inPlaceAllowed}`);
       const irLabel = oldExec ? 'EXEC zone' : ('IRAM fb r' + iramFbRegionByOff(off));
+      if (inPlaceAllowed) {
+        if (newBytes === oldBytes) return ptr;
+        // FIX(1.4): region_size_ok ДО любой модификации (и shrink, и grow)
+        if (!oldExec) {
+          const reg = iramFbRegionByOff(off);
+          if (!iramFbRegionSizeOk(reg, newBytes)) inPlaceAllowed = false;
+          else if (newBytes > oldBytes &&
+            !iramCanGrowFallback(off, oldBytes, newBytes)) inPlaceAllowed = false;
+        }
+      }
       if (inPlaceAllowed) {
         if (newBytes === oldBytes) return ptr;
         if (newBytes < oldBytes) {
@@ -1796,47 +1852,41 @@
           return ptr;
         }
         const extra = newBytes - oldBytes;
-        if (!oldExec) {
+        // grow (проверки уже выполнены выше)
+        const blockEnd = off + oldBytes;
+        let nextBoundary = (idx + 1 < S.iram.desc.length) ? S.iram.desc[idx + 1].off : S.iram.total;
+        if (oldExec) {
+          const zoneEnd = iramExecZoneEnd();
+          if (nextBoundary > zoneEnd) nextBoundary = zoneEnd;
+          tr(`  EXEC grow barrier: zone_end=${zoneEnd}`);
+        } else {
           const reg = iramFbRegionByOff(off);
-          if (!iramFbRegionSizeOk(reg, newBytes)) inPlaceAllowed = false;
-          else if (!iramCanGrowFallback(off, oldBytes, newBytes)) inPlaceAllowed = false;
-        }
-        if (inPlaceAllowed) {
-          const blockEnd = off + oldBytes;
-          let nextBoundary = (idx + 1 < S.iram.desc.length) ? S.iram.desc[idx + 1].off : S.iram.total;
-          if (oldExec) {
-            const zoneEnd = iramExecZoneEnd();
-            if (nextBoundary > zoneEnd) nextBoundary = zoneEnd;
-            tr(`  EXEC grow barrier: zone_end=${zoneEnd}`);
-          } else {
-            const reg = iramFbRegionByOff(off);
-            if (reg >= 0) {
-              const regEnd = fbRegionEnd(reg);
-              if (nextBoundary > regEnd) nextBoundary = regEnd;
-            }
+          if (reg >= 0) {
+            const regEnd = fbRegionEnd(reg);
+            if (nextBoundary > regEnd) nextBoundary = regEnd;
           }
-          if (nextBoundary >= blockEnd) {
-            const gap = nextBoundary - blockEnd;
-            if (gap >= extra) {
-              const tail = gap - extra;
-              let actualNew = newBytes, canExpand = isSliver(tail);
-              if (canExpand && !oldExec) {
-                const reg = iramFbRegionByOff(off);
-                if (reg >= 0) {
-                  const ma = S.iram.fbRegions[reg].max_bytes;
-                  if (ma !== UNLIMITED && oldBytes + gap > ma) canExpand = false;
-                }
+        }
+        if (nextBoundary >= blockEnd) {
+          const gap = nextBoundary - blockEnd;
+          if (gap >= extra) {
+            const tail = gap - extra;
+            let actualNew = newBytes, canExpand = isSliver(tail);
+            if (canExpand && !oldExec) {
+              const reg = iramFbRegionByOff(off);
+              if (reg >= 0) {
+                const ma = S.iram.fbRegions[reg].max_bytes;
+                if (ma !== UNLIMITED && oldBytes + gap > ma) canExpand = false;
               }
-              if (canExpand) {
-                actualNew = oldBytes + gap; S.stats.antiSliverExp++;
-                tr(`  IRAM grow: anti-sliver (tail ${tail}) → whole gap absorbed, new=${actualNew}`, 't-hit');
-                recordAF({ type: 'grow-absorb', where: 'iram realloc grow', arena: 'iram', label: irLabel, size: oldBytes, requested: newBytes, tail, gap, alloc: actualNew });
-              }
-              S.iram.desc[idx].len = actualNew;
-              iramAllocated(off + oldBytes, actualNew - oldBytes, oldExec, false);
-              tr('  IRAM grow in-place', 't-ok');
-              return ptr;
             }
+            if (canExpand) {
+              actualNew = oldBytes + gap; S.stats.antiSliverExp++;
+              tr(`  IRAM grow: anti-sliver (tail ${tail}) → whole gap absorbed, new=${actualNew}`, 't-hit');
+              recordAF({ type: 'grow-absorb', where: 'iram realloc grow', arena: 'iram', label: irLabel, size: oldBytes, requested: newBytes, tail, gap, alloc: actualNew });
+            }
+            S.iram.desc[idx].len = actualNew;
+            iramAllocated(off + oldBytes, actualNew - oldBytes, oldExec, false);
+            tr('  IRAM grow in-place', 't-ok');
+            return ptr;
           }
         }
       }
@@ -2296,7 +2346,8 @@
     let lastStructKey = null;
     let debounceTimer = null;
     function structKey() {
-      return [cfg.dramSize, cfg.iramSize, cfg.useIram, cfg.reserve, cfg.dramRegions, cfg.iramRegions].join('|');
+      return [cfg.dramSize, cfg.iramSize, cfg.useIram, cfg.reserve,
+      cfg.iramFbEnabled, cfg.dramRegions, cfg.iramRegions].join('|');
     }
     function applySettings() {
       readConfig();
@@ -2329,7 +2380,7 @@
     lastStructKey = structKey();
     updateSettingsVisibility();
     mxrInit();
-    logLine('Simulator ready. malloc path order: EXEC (first-fit INSIDE [0, reserve) only) → IRAM fallback (last-fit, BEFORE DRAM!) → DRAM own region (best-fit) → DRAM cross-region.', 't-warn');
+    logLine('Simulator ready. malloc path order: EXEC (first-fit INSIDE [0, reserve) only) → DRAM own region (best-fit) → DRAM cross-region → IRAM fallback (best-fit, top-aligned, AFTER DRAM by default). Order configurable via cfgIramOrder.', 't-warn');
     logLine('Cross-region is gated per arena: MXR_DRAM_CROSS_ENABLED / MXR_IRAM_CROSS_ENABLED checkboxes + "All (no guard)" option disables the max_bytes GUARD entirely. Guard rejections are counted in cross_guard_rej.', 't-warn');
   </script>
 </body>
