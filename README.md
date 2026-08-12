@@ -64,8 +64,8 @@ dedicated, hard-reserved zone at the start of IRAM.
 │             │  ┌──────────────┬───────────────────┐ │               │
 │             │  │  EXEC zone   │     FB zone       │ │               │
 │             │  │ [0, reserve) │ [reserve, end)    │ │               │
-│             │  │  first-fit → │ ← last-fit        │ │               │
-│             │  │  HARD-bound  │  fb size-classes  │ │               │
+│             │  │  first-fit → │ best-fit, block   │ │               │
+│             │  │  HARD-bound  │ top-aligned in gap│ │               │
 │             │  └──────────────┴───────────────────┘ │               │
 │             │            ↑ _iram_end                │               │
 │  0x4010C000 └───────────────────────────────────────┘               │
@@ -84,9 +84,13 @@ using first-fit from the start. Setting the reserve to `0` disables EXEC
 allocations entirely (every `MALLOC_CAP_EXEC` request returns `NULL` and
 increments `exec_zone_rejects`).
 
-**Fallback zone** — `[reserve, iram_end)`. Pure 32-bit non-EXEC allocations
-that fit the fallback criteria live here, split into size-class regions, and
-grow from the end (last-fit) so they stay away from the EXEC zone.
+**Fallback zone** — `[reserve, iram_end)`. Non-EXEC allocations that carry
+`MALLOC_CAP_32BIT`, `MALLOC_CAP_INTERNAL`, or no caps at all (and do NOT
+carry `8BIT`/`DMA`/`SPIRAM`) live here, split into size-class regions.
+Inside a region the search is **best-fit with early-exit**; among equal gaps
+the higher address is preferred, and the block is placed at the **top** of
+the chosen gap so that the low-address side stays free for EXEC-adjacent
+usage.
 
 **Descriptor format (8 bytes)** — no in-band headers, zero per-block overhead,
 no coalescing needed, free is an O(log n) binary search:
@@ -110,13 +114,8 @@ malloc_caps(size, caps)
  │       └─ no gap      ? → REJECT (alloc_fail_no_memory++)
  │       └─ found → insert desc (EXEC flag) → return (IRAM)
  │
- ├─ IRAM fallback allowed ? (32BIT, no 8BIT/DMA/SPIRAM)
- │   ├─ Step 1: own fb size-class region  (last-fit from end)
- │   └─ Step 2: IRAM fb cross-region      (if MXR_IRAM_CROSS_ENABLED)
- │       ├─ max_bytes GUARD   (skipped when preset = All)
- │       ├─ min_bytes guard   (skipped when preset = All)
- │       └─ directional search
- │   └─ found → insert desc → return (IRAM)
+ ├─ [CONFIG_MXR_IRAM_FB_ORDER_IRAM_FIRST]
+ │   └─ IRAM fallback attempt (BEFORE DRAM — original MxR order)
  │
  ├─ DRAM — Step 1: own size-class region
  │   └─ best-fit with early exit + anti-sliver expansion
@@ -126,7 +125,23 @@ malloc_caps(size, caps)
  │   ├─ min_bytes guard   (skipped when preset = All)
  │   └─ directional search
  │
+ ├─ [CONFIG_MXR_IRAM_FB_ORDER_DRAM_FIRST]  ← DEFAULT
+ │   └─ IRAM fallback attempt (AFTER DRAM fails)
+ │
  └─ FAIL → return NULL
+
+ IRAM fallback attempt (shared by both orders):
+  │  Allowed when: caps has 32BIT or INTERNAL or caps==0,
+  │                and caps has NO 8BIT / DMA / SPIRAM / EXEC,
+  │                and IRAM fb zone is non-empty, and block ≤ FB_MAX
+  │
+  ├─ Step 1: own fb size-class region
+  │   └─ best-fit + early exit, block placed at TOP of gap
+  └─ Step 2: IRAM fb cross-region (if MXR_IRAM_CROSS_ENABLED)
+      ├─ max_bytes GUARD   (skipped when preset = All)
+      ├─ min_bytes guard   (skipped when preset = All)
+      └─ directional search, block placed at TOP of gap
+  └─ found → insert desc → return (IRAM)
 ```
 
 ### Anti-sliver expansion
@@ -186,8 +201,9 @@ idf.py menuconfig
   → Component config
     → MxR-Malloc
       → Integration mode: Wrap mode (default & safest)
-      → Region boundaries:      "4-12%,128-14%,256-10%,512-25%,1280-0%"
-      → IRAM fb region layout:  "4-0%"            (single flat fb region)
+      → Region boundaries:      "4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
+      → IRAM fb region layout:  "4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
+      → IRAM fallback order:    DRAM first (recommended)
       → Enable IRAM heap: [*]
       → IRAM_RESERVE_BYTES: 2048
 ```
@@ -202,7 +218,7 @@ At boot you will see:
 
 ```
 I (123) mxr_malloc: init ok: base=0x3ffe9a10 bytes=78832 dram_desc=256 iram_desc=128
-I (126) mxr_malloc: IRAM heap ok: base=0x4010a230 bytes=7472 fb_zone=5424 fb_regions=1
+I (126) mxr_malloc: IRAM heap ok: base=0x4010a230 bytes=7472 fb_zone=5424 fb_regions=7
 ```
 
 ## ⚙️ Configuration
@@ -212,19 +228,20 @@ I (126) mxr_malloc: IRAM heap ok: base=0x4010a230 bytes=7472 fb_zone=5424 fb_reg
 Both DRAM and IRAM-fallback topologies are defined by one string each:
 
 ```
-CONFIG_MXR_REGION_CONFIG="4-12%,128-14%,256-10%,512-25%,1280-0%"
-CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-0%"
+CONFIG_MXR_REGION_CONFIG="4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
+CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%"
 ```
 
 | Entry | Meaning |
 | --- | --- |
-| `4-12%` | Region 0: blocks ≥ 4 bytes, gets 12% of the zone |
-| `128-14%` | Region 1: blocks ≥ 128 bytes, gets 14% |
-| `1280-0%` | Last region: unlimited, absorbs all leftover memory |
+| `4-8%` | Region 0: blocks ≥ 4 bytes, gets 8% of the zone |
+| `32-10%` | Region 1: blocks ≥ 32 bytes, gets 10% |
+| `1024-0%` | Last region: unlimited, absorbs all leftover memory |
 
 - Rules: the last region is always unlimited and absorbs leftover memory;
 - boundaries must be strictly increasing; percent sum ≤ 100; an empty IRAM-fb
-- string yields a single flat fallback region. Validated at CMake configure time.
+  string yields a single flat fallback region. Validated at CMake configure
+  time (IRAM-fb string is validated only when `MXR_IRAM_FALLBACK_ENABLED=y`).
 
 ### Key options
 
@@ -235,8 +252,11 @@ CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-0%"
 | `MXR_COMPACT_TYPES` | y | `uint16_t` for caps/min/max/count |
 | `MXR_USE_IRAM` | y | Enable IRAM heap |
 | `MXR_IRAM_RESERVE_BYTES` | 2048 | Hard-bound EXEC zone `[0, reserve)`; `0` disables EXEC |
-| `MXR_IRAM_FALLBACK_MAX_BYTES` | 0 (∞) | Max non-EXEC block allowed in IRAM |
-| `MXR_IRAM_FALLBACK_REGION_CONFIG` | `"4-0%"` | IRAM fb region layout |
+| `MXR_IRAM_FALLBACK_ENABLED` | y | Enable non-EXEC 32-bit/INTERNAL fallback into IRAM |
+| `MXR_IRAM_FALLBACK_MAX_BYTES` | 0 (∞) | Max non-EXEC block allowed in IRAM fb |
+| `MXR_IRAM_FALLBACK_REGION_CONFIG` | 7-class string | IRAM fb region layout |
+| `MXR_IRAM_FB_ORDER_*` | `DRAM_FIRST` | IRAM-first vs DRAM-first fallback order |
+| `MXR_IRAM_EXEC_WHOLE_IF_NO_FB` | y | Give whole IRAM to EXEC when fallback off |
 | `MXR_CROSS_REGION_FALLBACK` | y | Cross-region master switch |
 | `MXR_DRAM_CROSS_ENABLED` | y | DRAM cross-region on/off |
 | `MXR_IRAM_CROSS_ENABLED` | y | IRAM fb cross-region on/off |
@@ -245,6 +265,8 @@ CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-0%"
 | `MXR_BEST_FIT_EARLY_EXIT` | y | Best-fit early exit |
 | `MXR_BEST_FIT_WASTE_SHIFT` | 2 | Early-exit waste threshold (1–4) |
 | `MXR_IRAM_HOT_PATH_DISABLED` | n | Keep malloc/free out of IRAM |
+| `MXR_IRAM_PATH_CORE` | y | IRAM hot path = malloc/free only |
+| `MXR_IRAM_PATH_ALLOC_FAMILY` | n | IRAM hot path = +calloc/zalloc/realloc |
 
 ### Descriptor table placement
 
@@ -288,6 +310,9 @@ void  *heap_caps_zalloc(size_t size, uint32_t caps);
 size_t heap_caps_get_free_size(uint32_t caps);
 size_t heap_caps_get_minimum_free_size(uint32_t caps);
 size_t heap_caps_get_dram_free_size(void);
+size_t heap_caps_get_total_size(uint32_t caps);
+size_t heap_caps_get_allocated_size(uint32_t caps);
+size_t heap_caps_get_largest_free_block(uint32_t caps);
 ```
 
 ### MxR-native API
@@ -304,6 +329,9 @@ bool   mxr_get_region_status(int index, mxr_region_status_t *status);
 bool   mxr_get_iram_fb_region_status(int index, mxr_region_status_t *status);
 size_t mxr_get_free_size_caps(uint32_t caps);
 size_t mxr_get_min_free_size_caps(uint32_t caps);
+size_t mxr_get_total_size_caps(uint32_t caps);
+size_t mxr_get_largest_free_block_caps(uint32_t caps);
+size_t mxr_get_allocated_size_caps(uint32_t caps);
 void   mxr_dump(void);
 ```
 
@@ -315,8 +343,12 @@ MALLOC_CAP_32BIT     (1 << 1)   // 32-bit aligned access
 MALLOC_CAP_8BIT      (1 << 2)   // 8-bit access (DRAM only)
 MALLOC_CAP_DMA       (1 << 3)   // DMA-capable (DRAM only)
 MALLOC_CAP_SPIRAM    (1 << 10)  // compatibility
-MALLOC_CAP_INTERNAL  (1 << 11)  // internal memory
+MALLOC_CAP_INTERNAL  (1 << 11)  // internal memory (DRAM or IRAM fb)
 ```
+
+> **IRAM fallback admission:** a request enters the IRAM fallback path when
+> it has `32BIT` **or** `INTERNAL` **or** `caps == 0`, and does **not** have
+> `8BIT`, `DMA`, `SPIRAM`, or `EXEC`.
 
 ## 📊 Diagnostics
 
@@ -378,6 +410,12 @@ I mxr_malloc: stats: fail_mem=0 fail_table=0 invalid_free=0
   never leaves the EXEC zone.
 - **`MXR_IRAM_PATH_ALLOC_FAMILY`** — placing the full allocation family in IRAM
   consumes significant IRAM. Check `idf.py size` before enabling.
+- **IRAM fb order** — with the default `DRAM_FIRST`, pure-32-bit/INTERNAL
+  allocations reach IRAM only after DRAM is exhausted. Use `IRAM_FIRST`
+  (original behavior) if you want IRAM preferred.
+- **IRAM fb region_for_size** — no implicit fallback to first/last region;
+  a misconfigured layout that leaves a size hole will return `NULL` for
+  that size class instead of silently using a wrong region.
 
 ## 📁 Project Structure
 
