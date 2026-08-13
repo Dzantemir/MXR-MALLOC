@@ -1098,6 +1098,12 @@
               S.iram.fbZoneTotal = 0;
               bytes = r2; S.iram.total = r2;  // truncate arena
               S.iram.freeBytes = r2; S.iram.minFreeBytes = r2;
+              // FIX(A): как в C — если total == 0, IRAM полностью отключён
+              if (r2 === 0) {
+                tr('IRAM heap: reserve=0 and fallback disabled, IRAM arena off', 't-warn');
+                S.iram.fbRegions = [];
+                // НЕ устанавливаем S.iram.enabled = true
+              }
             }
           } else if (reserve >= bytes) {
             S.iram.fbZoneStart = bytes; S.iram.fbZoneTotal = 0;
@@ -1106,17 +1112,19 @@
           }
           S.iram.execFree = S.iram.fbZoneStart;
           S.iram.execMinFree = S.iram.fbZoneStart;
-          try { initIramFbRegions(); S.iram.enabled = true; }
-          catch (e) {
-            tr(`IRAM fb init: ${e} — falling back to a single flat region`, 't-warn');
-            S.stats.iramFbInitFallback = true;
-            S.iram.fbRegions = [{
-              caps: CAP_32BIT | CAP_INTERNAL, start_byte: S.iram.fbZoneStart,
-              total_bytes: S.iram.fbZoneTotal, min_bytes: ALIGN, max_bytes: UNLIMITED,
-              free_bytes: S.iram.fbZoneTotal, min_free_bytes: S.iram.fbZoneTotal, alloc_count: 0,
-              largest_cache: S.iram.fbZoneTotal, cache_valid: 1
-            }];
-            S.iram.enabled = true;
+          if (S.iram.total > 0) {   // FIX(A): не инициализируем при total==0
+            try { initIramFbRegions(); S.iram.enabled = true; }
+            catch (e) {
+              tr(`IRAM fb init: ${e} — falling back to a single flat region`, 't-warn');
+              S.stats.iramFbInitFallback = true;
+              S.iram.fbRegions = [{
+                caps: CAP_32BIT | CAP_INTERNAL, start_byte: S.iram.fbZoneStart,
+                total_bytes: S.iram.fbZoneTotal, min_bytes: ALIGN, max_bytes: UNLIMITED,
+                free_bytes: S.iram.fbZoneTotal, min_free_bytes: S.iram.fbZoneTotal, alloc_count: 0,
+                largest_cache: S.iram.fbZoneTotal, cache_valid: 1
+              }];
+              S.iram.enabled = true;
+            }
           }
           tr(`IRAM heap ok: total=${bytes} exec_zone=[0,${S.iram.fbZoneStart}) fb_zone=${S.iram.fbZoneTotal} fb_regions=${S.iram.fbRegions.length}`, 't-ok');
           if (S.iram.fbZoneStart === 0)
@@ -2410,7 +2418,7 @@
     let debounceTimer = null;
     function structKey() {
       return [cfg.dramSize, cfg.iramSize, cfg.useIram, cfg.reserve,
-      cfg.iramFbEnabled, cfg.dramRegions, cfg.iramRegions].join('|');
+      cfg.iramFbEnabled, cfg.execWhole, cfg.dramRegions, cfg.iramRegions].join('|');
     }
     function applySettings() {
       readConfig();
