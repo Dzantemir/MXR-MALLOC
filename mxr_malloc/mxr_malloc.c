@@ -97,8 +97,13 @@ static uint32_t s_iram_fallback_allocs MXR_IRAM_DATA_ATTR;
 /* ---- IRAM fallback zone + regions ---- */
 static uint32_t s_iram_fb_zone_start MXR_IRAM_DATA_ATTR;
 static uint32_t s_iram_fb_zone_total MXR_IRAM_DATA_ATTR;
+/* Скаляр оставляем всегда (1 байт): нужен в status/dump,
+ * при выключенном fallback всегда == 0 */
 static uint8_t s_iram_fb_region_count;
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
 static mxr_region_t s_iram_fb_region[MXR_IRAM_FB_REGION_COUNT] MXR_IRAM_DATA_ATTR;
+#endif
+
 #endif
 
 #define MXR_ACTIVE_TOTAL_REGIONS MXR_USER_REGIONS
@@ -108,7 +113,8 @@ static mxr_region_t s_iram_fb_region[MXR_IRAM_FB_REGION_COUNT] MXR_IRAM_DATA_ATT
 static mxr_region_t s_region[MXR_ACTIVE_TOTAL_REGIONS] MXR_IRAM_DATA_ATTR;
 
 static uint8_t mxr_parse_region_config(const char *s, mxr_region_cfg_t *out, uint8_t max_count);
-
+static size_t mxr_get_total_size_caps_locked(uint32_t caps);
+static size_t mxr_get_free_size_caps_locked(uint32_t caps);
 /* ================================================================
  *  Word-aligned memory helpers (IRAM-safe, no libc)
  * ================================================================ */
@@ -129,6 +135,10 @@ static inline void MXR_IRAM_ALLOC_ATTR mxr_memcpy4(void *dst, const void *src, s
         d[i] = s[i];
 }
 
+static inline uint32_t mxr_percent_of(uint32_t total, uint32_t percent)
+{
+    return (total / 100u) * percent + ((total % 100u) * percent) / 100u;
+}
 /* ================================================================
  *  Basic conversions
  * ================================================================ */
@@ -325,17 +335,18 @@ static void MXR_IRAM_ATTR mxr_dram_desc_remove(int index)
  *  IRAM descriptor array operations
  * ================================================================ */
 #ifdef CONFIG_MXR_USE_IRAM
-
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
 static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_in_region(
     int reg,
     uint32_t bytes,
     uint32_t *out_off,
     uint32_t *out_alloc_bytes);
-
 static uint32_t MXR_IRAM_ATTR mxr_iram_fb_region_largest_free(int reg);
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED */
 
 #if defined(CONFIG_MXR_CROSS_REGION_FALLBACK) && \
-    defined(CONFIG_MXR_IRAM_CROSS_ENABLED)
+    defined(CONFIG_MXR_IRAM_CROSS_ENABLED) &&    \
+    defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
 
 static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_and_largest(
     int reg,
@@ -432,63 +443,18 @@ static bool MXR_IRAM_ATTR mxr_iram_fb_try_cross_region(
 
 #endif
 
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
 static uint32_t MXR_IRAM_INLINE_ATTR mxr_iram_fb_region_end(int reg)
 {
     return s_iram_fb_region[reg].start_byte +
            (uint32_t)s_iram_fb_region[reg].total_bytes;
 }
-
 static inline void MXR_IRAM_INLINE_ATTR mxr_iram_fb_region_invalidate_cache(int reg)
 {
     if (reg >= 0 && reg < (int)s_iram_fb_region_count)
         s_iram_fb_region[reg].largest_cache_valid = 0;
 }
-
-/* Учёт произвольного [off, off+len) интервала по fb-регионам (для EXEC). */
-// static void MXR_IRAM_ATTR mxr_iram_fb_account_alloc(uint32_t off, uint32_t len)
-// {
-//     uint32_t end = off + (uint32_t)len;
-//     for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
-//     {
-//         uint32_t rs = s_iram_fb_region[i].start_byte;
-//         uint32_t re = mxr_iram_fb_region_end((int)i);
-//         uint32_t lo = (off > rs) ? off : rs;
-//         uint32_t hi = (end < re) ? end : re;
-//         if (lo < hi)
-//         {
-//             uint32_t part = (uint32_t)(hi - lo);
-//             if (s_iram_fb_region[i].free_bytes >= part)
-//                 s_iram_fb_region[i].free_bytes -= part;
-//             else
-//                 s_iram_fb_region[i].free_bytes = 0;
-//             if (s_iram_fb_region[i].free_bytes < s_iram_fb_region[i].min_free_bytes)
-//                 s_iram_fb_region[i].min_free_bytes = s_iram_fb_region[i].free_bytes;
-//             mxr_iram_fb_region_invalidate_cache((int)i);
-//             /* alloc_count не трогаем: он считает fallback-блоки, не EXEC */
-//         }
-//     }
-// }
-
-// static void MXR_IRAM_ATTR mxr_iram_fb_account_free(uint32_t off, uint32_t len)
-// {
-//     uint32_t end = off + (uint32_t)len;
-//     for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
-//     {
-//         uint32_t rs = s_iram_fb_region[i].start_byte;
-//         uint32_t re = mxr_iram_fb_region_end((int)i);
-//         uint32_t lo = (off > rs) ? off : rs;
-//         uint32_t hi = (end < re) ? end : re;
-//         if (lo < hi)
-//         {
-//             uint32_t part = (uint32_t)(hi - lo);
-//             uint32_t nf = s_iram_fb_region[i].free_bytes + part;
-//             if (nf > s_iram_fb_region[i].total_bytes)
-//                 nf = s_iram_fb_region[i].total_bytes;
-//             s_iram_fb_region[i].free_bytes = nf;
-//             mxr_iram_fb_region_invalidate_cache((int)i);
-//         }
-//     }
-// }
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED */
 
 static void MXR_IRAM_ATTR mxr_iram_desc_shift_right(uint16_t pos)
 {
@@ -1114,11 +1080,14 @@ static bool MXR_IRAM_ATTR mxr_try_alloc_region(
  *  IRAM helpers
  * ================================================================ */
 #ifdef CONFIG_MXR_USE_IRAM
-
-/*
- * Last-fit search inside one fallback region.
- * Keeps fallback blocks away from the EXEC zone at the start of IRAM.
- */
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
+/* ================================================================
+ *  FIX(3.3): BEST-FIT с early-exit внутри одного fb-региона.
+ *  Раньше: last-fit first-match (первый gap с конца).
+ *  Теперь: наименьший подходящий gap; при равных gap предпочтение
+ *  более высокому адресу (дальше от EXEC-зоны). Блок размещается
+ *  у ВЕРХНЕЙ границы gap, чтобы низ оставался свободным.
+ * ================================================================ */
 static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_in_region(
     int reg,
     uint32_t bytes,
@@ -1129,169 +1098,217 @@ static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_in_region(
         return false;
     uint32_t reg_start = s_iram_fb_region[reg].start_byte;
     uint32_t reg_end = mxr_iram_fb_region_end(reg);
-
-    /* ===== ДОБАВЛЕНО ===== */
     uint32_t max_allowed = s_iram_fb_region[reg].max_bytes;
-    /* ====================== */
-
     if (s_iram_fb_region[reg].free_bytes < bytes)
         return false;
-    uint32_t candidate_end = reg_end;
-    for (int i = (int)s_iram_desc_count - 1; i >= 0; i--)
+
+    uint32_t cur = reg_start;
+    uint32_t best_off = 0;
+    uint32_t best_gap = UINT32_MAX;
+    bool found = false;
+
+#if MXR_EARLY_EXIT_ACTIVE
+    uint32_t waste_limit = bytes >> MXR_BEST_FIT_WASTE_SHIFT;
+    if (waste_limit < MXR_ALIGN_SIZE)
+        waste_limit = MXR_ALIGN_SIZE;
+#else
+    uint32_t waste_limit = 0;
+#endif
+
+    for (uint16_t i = 0; i < s_iram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_iram_desc[i]);
         uint32_t len = mxr_desc_len(&s_iram_desc[i]);
         uint32_t block_end = off + (uint32_t)len;
         if (block_end <= reg_start)
-            break;
-        if (off >= reg_end)
             continue;
-        if (candidate_end > block_end)
+        if (off >= reg_end)
+            break;
+        if (off > cur)
         {
-            uint32_t gap = (uint32_t)(candidate_end - block_end);
+            uint32_t gap = (uint32_t)(off - cur);
             if (gap >= bytes)
             {
                 uint32_t waste = gap - bytes;
-                /* ===== ИСПРАВЛЕНО ===== */
+                if (waste <= waste_limit)
+                {
+                    /* Early-exit: gap достаточно хорош */
+                    if (MXR_IS_SLIVER(waste) &&
+                        (max_allowed == MXR_REGION_MAX_UNLIMITED || gap <= max_allowed))
+                    {
+                        *out_off = cur;
+                        *out_alloc_bytes = gap;
+                        s_stats.anti_sliver_expansions++;
+                    }
+                    else
+                    {
+                        *out_off = (cur + gap) - bytes; /* прижать к верху gap */
+                        *out_alloc_bytes = bytes;
+                    }
+                    s_stats.best_fit_early_exits++;
+                    return true;
+                }
+                /* меньший gap лучше; при равенстве — выше адрес */
+                if (gap < best_gap || (gap == best_gap && cur > best_off))
+                {
+                    best_gap = gap;
+                    best_off = cur;
+                    found = true;
+                }
+            }
+        }
+        if (block_end > cur)
+            cur = block_end;
+        if (cur >= reg_end)
+            break;
+    }
+
+    /* Хвост региона */
+    if (reg_end > cur)
+    {
+        uint32_t gap = (uint32_t)(reg_end - cur);
+        if (gap >= bytes)
+        {
+            uint32_t waste = gap - bytes;
+            if (waste <= waste_limit)
+            {
                 if (MXR_IS_SLIVER(waste) &&
                     (max_allowed == MXR_REGION_MAX_UNLIMITED || gap <= max_allowed))
                 {
-                    *out_off = block_end;
+                    *out_off = cur;
                     *out_alloc_bytes = gap;
                     s_stats.anti_sliver_expansions++;
                 }
                 else
                 {
-                    *out_off = candidate_end - (uint32_t)bytes;
+                    *out_off = (cur + gap) - bytes;
                     *out_alloc_bytes = bytes;
                 }
-                /* ======================= */
+                s_stats.best_fit_early_exits++;
                 return true;
             }
+            if (gap < best_gap || (gap == best_gap && cur > best_off))
+            {
+                best_gap = gap;
+                best_off = cur;
+                found = true;
+            }
         }
-        if (off < candidate_end)
-            candidate_end = off;
-        if (candidate_end <= reg_start)
-            break;
     }
-    if (candidate_end > reg_start)
+
+    if (!found)
+        return false;
+
+    uint32_t waste = best_gap - bytes;
+    if (MXR_IS_SLIVER(waste) &&
+        (max_allowed == MXR_REGION_MAX_UNLIMITED || best_gap <= max_allowed))
     {
-        uint32_t gap = (uint32_t)(candidate_end - reg_start);
-        if (gap >= bytes)
-        {
-            uint32_t waste = gap - bytes;
-            /* ===== ИСПРАВЛЕНО ===== */
-            if (MXR_IS_SLIVER(waste) &&
-                (max_allowed == MXR_REGION_MAX_UNLIMITED || gap <= max_allowed))
-            {
-                *out_off = reg_start;
-                *out_alloc_bytes = gap;
-                s_stats.anti_sliver_expansions++;
-            }
-            else
-            {
-                *out_off = candidate_end - (uint32_t)bytes;
-                *out_alloc_bytes = bytes;
-            }
-            /* ======================= */
-            return true;
-        }
+        *out_off = best_off;
+        *out_alloc_bytes = best_gap;
+        s_stats.anti_sliver_expansions++;
     }
-    return false;
+    else
+    {
+        *out_off = (best_off + best_gap) - bytes;
+        *out_alloc_bytes = bytes;
+    }
+    return true;
 }
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED (find_free_in_region) */
 
 #if defined(CONFIG_MXR_CROSS_REGION_FALLBACK) && \
-    defined(CONFIG_MXR_IRAM_CROSS_ENABLED)
+    defined(CONFIG_MXR_IRAM_CROSS_ENABLED) &&    \
+    defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
 /* ================================================================
- *  IRAM fb free-block search + largest in one pass (last-fit)
- *
- *  Объединяет mxr_iram_fb_find_free_in_region и
- *  mxr_iram_fb_region_largest_free в один проход.
- *  Идёт с конца (last-fit), как оригинальная функция.
+ *  FIX(3.3): IRAM fb search + largest, BEST-FIT (полный проход,
+ *  т.к. largest всё равно нужно досчитать).
  * ================================================================ */
 static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_and_largest(
     int reg,
     uint32_t bytes,
     uint32_t *out_off,
     uint32_t *out_largest,
-    uint32_t *out_alloc_bytes) /* НОВЫЙ параметр */
+    uint32_t *out_alloc_bytes)
 {
     if (reg < 0 || reg >= (int)s_iram_fb_region_count)
         return false;
     uint32_t reg_start = s_iram_fb_region[reg].start_byte;
     uint32_t reg_end = mxr_iram_fb_region_end(reg);
     uint32_t max_allowed = s_iram_fb_region[reg].max_bytes;
-
     if (s_iram_fb_region[reg].free_bytes < bytes)
         return false;
-    uint32_t candidate_end = reg_end;
+
+    uint32_t cur = reg_start;
     uint32_t largest = 0;
+    uint32_t best_off = 0;
+    uint32_t best_gap = UINT32_MAX;
     bool found = false;
-    for (int i = (int)s_iram_desc_count - 1; i >= 0; i--)
+
+    for (uint16_t i = 0; i < s_iram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_iram_desc[i]);
         uint32_t len = mxr_desc_len(&s_iram_desc[i]);
         uint32_t block_end = off + (uint32_t)len;
         if (block_end <= reg_start)
-            break;
-        if (off >= reg_end)
             continue;
-        if (candidate_end > block_end)
+        if (off >= reg_end)
+            break;
+        if (off > cur)
         {
-            uint32_t gap = (uint32_t)(candidate_end - block_end);
+            uint32_t gap = (uint32_t)(off - cur);
             if (gap > largest)
                 largest = gap;
-            if (!found && gap >= bytes)
+            if (gap >= bytes)
             {
-                uint32_t waste = gap - bytes;
-                /* ===== ИСПРАВЛЕНО ===== */
-                if (MXR_IS_SLIVER(waste) &&
-                    (max_allowed == MXR_REGION_MAX_UNLIMITED || gap <= max_allowed))
+                if (!found || gap < best_gap || (gap == best_gap && cur > best_off))
                 {
-                    *out_off = block_end;
-                    *out_alloc_bytes = gap;
-                    s_stats.anti_sliver_expansions++; /* ДОБАВЛЕНО */
+                    best_off = cur;
+                    best_gap = gap;
+                    found = true;
                 }
-                else
-                {
-                    *out_off = candidate_end - (uint32_t)bytes;
-                    *out_alloc_bytes = bytes;
-                }
+            }
+        }
+        if (block_end > cur)
+            cur = block_end;
+        if (cur >= reg_end)
+            break;
+    }
+
+    if (reg_end > cur)
+    {
+        uint32_t gap = (uint32_t)(reg_end - cur);
+        if (gap > largest)
+            largest = gap;
+        if (gap >= bytes)
+        {
+            if (!found || gap < best_gap || (gap == best_gap && cur > best_off))
+            {
+                best_off = cur;
+                best_gap = gap;
                 found = true;
             }
         }
-        if (off < candidate_end)
-            candidate_end = off;
-        if (candidate_end <= reg_start)
-            break;
     }
-    if (candidate_end > reg_start)
-    {
-        uint32_t gap = (uint32_t)(candidate_end - reg_start);
-        if (gap > largest)
-            largest = gap;
-        if (!found && gap >= bytes)
-        {
-            uint32_t waste = gap - bytes;
-            /* ===== ИСПРАВЛЕНО ===== */
-            if (MXR_IS_SLIVER(waste) &&
-                (max_allowed == MXR_REGION_MAX_UNLIMITED || gap <= max_allowed))
-            {
-                *out_off = reg_start;
-                *out_alloc_bytes = gap;
-                s_stats.anti_sliver_expansions++; /* ДОБАВЛЕНО */
-            }
-            else
-            {
-                *out_off = candidate_end - (uint32_t)bytes;
-                *out_alloc_bytes = bytes;
-            }
-            found = true;
-        }
-    }
+
     if (out_largest)
         *out_largest = largest;
-    return found;
+    if (!found)
+        return false;
+
+    uint32_t waste = best_gap - bytes;
+    if (MXR_IS_SLIVER(waste) &&
+        (max_allowed == MXR_REGION_MAX_UNLIMITED || best_gap <= max_allowed))
+    {
+        *out_off = best_off;
+        *out_alloc_bytes = best_gap;
+        s_stats.anti_sliver_expansions++;
+    }
+    else
+    {
+        *out_off = (best_off + best_gap) - bytes;
+        *out_alloc_bytes = bytes;
+    }
+    return true;
 }
 
 #endif
@@ -1387,6 +1404,7 @@ static uint32_t MXR_IRAM_ATTR mxr_iram_largest_free_zone_aware(void)
 /* ================================================================
  *  IRAM fallback region helpers
  * ================================================================ */
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
 static int MXR_IRAM_ATTR mxr_iram_fb_region_by_off(uint32_t off_bytes)
 {
     for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
@@ -1399,6 +1417,10 @@ static int MXR_IRAM_ATTR mxr_iram_fb_region_by_off(uint32_t off_bytes)
     return -1;
 }
 
+/* FIX: убран избыточный fallback на last/first регион — он маскировал
+ * ошибки конфигурации. Основной цикл всегда находит подходящий регион
+ * (последний регион unlimited), иначе конфигурация некорректна и
+ * cross-region пусть разбирается сам. */
 static int MXR_IRAM_ATTR mxr_iram_fb_region_for_size(uint32_t bytes)
 {
     for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
@@ -1409,22 +1431,6 @@ static int MXR_IRAM_ATTR mxr_iram_fb_region_for_size(uint32_t bytes)
             bytes > (uint32_t)s_iram_fb_region[i].max_bytes)
             continue;
         return (int)i;
-    }
-    if (s_iram_fb_region_count > 0)
-    {
-        int last = (int)s_iram_fb_region_count - 1;
-        if (bytes >= (uint32_t)s_iram_fb_region[last].min_bytes &&
-            (s_iram_fb_region[last].max_bytes == MXR_REGION_MAX_UNLIMITED ||
-             bytes <= (uint32_t)s_iram_fb_region[last].max_bytes))
-        {
-            return last;
-        }
-        if (bytes >= (uint32_t)s_iram_fb_region[0].min_bytes &&
-            (s_iram_fb_region[0].max_bytes == MXR_REGION_MAX_UNLIMITED ||
-             bytes <= (uint32_t)s_iram_fb_region[0].max_bytes))
-        {
-            return 0;
-        }
     }
     return -1;
 }
@@ -1512,7 +1518,7 @@ static void MXR_IRAM_ATTR mxr_iram_fb_region_released(int reg, uint32_t bytes,
         s_iram_fb_region[reg].alloc_count--;
     mxr_iram_fb_region_invalidate_cache(reg);
 }
-
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED (IRAM fallback region helpers) */
 /* ================================================================
  *  IRAM global accounting (region-aware via offset)
  *
@@ -1550,8 +1556,10 @@ static void MXR_IRAM_ATTR mxr_iram_allocated(uint32_t off_bytes,
         if (s_iram_exec_free_bytes < s_iram_exec_min_free_bytes)
             s_iram_exec_min_free_bytes = s_iram_exec_free_bytes;
     }
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
     else
         mxr_iram_fb_region_allocated(mxr_iram_fb_region_by_off(off_bytes), bytes, count_block);
+#endif
 }
 
 static void MXR_IRAM_ATTR mxr_iram_released(uint32_t off_bytes,
@@ -1575,8 +1583,10 @@ static void MXR_IRAM_ATTR mxr_iram_released(uint32_t off_bytes,
             nf = cap;
         s_iram_exec_free_bytes = nf;
     }
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
     else
         mxr_iram_fb_region_released(mxr_iram_fb_region_by_off(off_bytes), bytes, count_block);
+#endif
 }
 
 /* ================================================================
@@ -1646,13 +1656,19 @@ static bool MXR_IRAM_ATTR mxr_caps_allow_iram_fallback(uint32_t caps)
     if (!s_iram_enabled)
         return false;
 
+    /* EXEC уходит в отдельную EXEC-зону, не в fallback */
     if (caps & MALLOC_CAP_EXEC)
         return false;
 
+    /* 8BIT/DMA/SPIRAM в IRAM нельзя никогда */
     if (caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM))
         return false;
 
-    if ((caps & MALLOC_CAP_32BIT) || caps == 0)
+    /* ESP32-совместимость: MALLOC_CAP_INTERNAL = любая внутренняя память
+     * (DRAM или IRAM). Чистый INTERNAL теперь может использовать IRAM fb
+     * точно так же, как 32BIT. При дефолтном порядке DRAM-first INTERNAL
+     * сначала пытается в DRAM и уходит в IRAM только при нехватке DRAM. */
+    if ((caps & MALLOC_CAP_32BIT) || (caps & MALLOC_CAP_INTERNAL) || caps == 0)
         return true;
 
     return false;
@@ -1693,6 +1709,7 @@ static bool MXR_IRAM_ATTR mxr_iram_can_fallback(uint32_t bytes)
  * Check that a non-EXEC fallback block can grow in place within
  * its fallback region.
  */
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
 static bool MXR_IRAM_ATTR mxr_iram_can_grow_fallback(
     uint32_t off_bytes,
     uint32_t old_bytes,
@@ -1719,7 +1736,8 @@ static bool MXR_IRAM_ATTR mxr_iram_can_grow_fallback(
     }
     return true;
 }
-
+#endif
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
 /* ================================================================
  *  IRAM fallback region initialization
  * ================================================================ */
@@ -1763,7 +1781,16 @@ static bool mxr_init_iram_fb_regions(void)
                        (unsigned)percent_sum);
         return false;
     }
-
+    for (uint8_t i = 0; i < (uint8_t)(total - 1); i++)
+    {
+        if (cfg[i].percent == 0)
+        {
+            ESP_EARLY_LOGE(TAG,
+                           "IRAM fb region %u has percent 0 but is not last",
+                           (unsigned)i);
+            return false;
+        }
+    }
     /* Align boundaries to 4 bytes */
     for (uint8_t i = 0; i < total; i++)
     {
@@ -1805,7 +1832,7 @@ static bool mxr_init_iram_fb_regions(void)
         }
         else
         {
-            bytes = (uint32_t)(((uint64_t)s_iram_fb_zone_total * cfg[i].percent) / 100);
+            bytes = mxr_percent_of(s_iram_fb_zone_total, cfg[i].percent); /* FIX(1.5) */
             bytes = (uint32_t)mxr_align4((size_t)bytes);
         }
         if (bytes < (uint32_t)cfg[i].min_bytes)
@@ -1845,6 +1872,8 @@ static bool mxr_init_iram_fb_regions(void)
 
     return true;
 }
+
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED (mxr_init_iram_fb_regions) */
 
 static void mxr_init_iram(void)
 {
@@ -1897,6 +1926,7 @@ static void mxr_init_iram(void)
 
     /* Compute fixed fallback zone = [reserve, iram_end) */
     uint32_t reserve = mxr_iram_reserve_bytes();
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
     if (reserve >= s_iram_total_bytes)
     {
         s_iram_fb_zone_start = s_iram_total_bytes;
@@ -1907,18 +1937,41 @@ static void mxr_init_iram(void)
         s_iram_fb_zone_start = reserve;
         s_iram_fb_zone_total = s_iram_total_bytes - reserve;
     }
+#else
+    /* FIX(1.2/1.3): fallback выключен.
+     * По умолчанию (MXR_IRAM_EXEC_WHOLE_IF_NO_FB=y) вся IRAM отдаётся
+     * EXEC-зоне, чтобы память не простаивала.
+     * Иначе EXEC остаётся [0, reserve), а неиспользуемый остаток
+     * исключается из арены и из статистики. */
+#ifdef CONFIG_MXR_IRAM_EXEC_WHOLE_IF_NO_FB
+    s_iram_fb_zone_start = s_iram_total_bytes; /* EXEC-зона = вся IRAM */
+    s_iram_fb_zone_total = 0;
+#else
+    if (reserve > s_iram_total_bytes)
+        reserve = s_iram_total_bytes;
+    s_iram_fb_zone_start = reserve;
+    s_iram_fb_zone_total = 0;
+    /* Урезаем арену до реально используемой EXEC-зоны */
+    s_iram_total_bytes = reserve;
+    s_iram_free_bytes = reserve;
+    s_iram_min_free_bytes = reserve;
+    if (s_iram_total_bytes == 0)
+    {
+        ESP_EARLY_LOGD(TAG, "IRAM heap: reserve=0 and fallback disabled, IRAM arena off");
+        return; /* s_iram_enabled остаётся false */
+    }
+#endif
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED */
 
-    /* EXEC-зона = [0, fb_zone_start): вся зарезервирована под EXEC */
+    /* EXEC-зона = [0, fb_zone_start) */
     s_iram_exec_free_bytes = s_iram_fb_zone_start;
     s_iram_exec_min_free_bytes = s_iram_fb_zone_start;
 
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
     if (!mxr_init_iram_fb_regions())
     {
         ESP_EARLY_LOGW(TAG, "IRAM fb region init failed, using flat");
-
-        /* FIX(4c): отражаем, что IRAM fb регионы упали в flat fallback */
         s_stats.iram_fb_region_init_fallback = true;
-
         /* Fall back to a single flat region */
         s_iram_fb_region_count = 1;
         s_iram_fb_region[0].caps = (mxr_caps_t)MXR_IRAM_FB_CAPS_DEFAULT;
@@ -1934,9 +1987,13 @@ static void mxr_init_iram(void)
     }
     else
     {
-        /* FIX(4c): успешная инициализация IRAM fb регионов */
         s_stats.iram_fb_region_init_fallback = false;
     }
+#else
+    /* FIX(1.3): fb-регионы существуют только при включённом fallback */
+    s_iram_fb_region_count = 0;
+    s_stats.iram_fb_region_init_fallback = false;
+#endif
 
     s_iram_enabled = true;
     ESP_EARLY_LOGD(TAG,
@@ -2054,6 +2111,81 @@ static void *MXR_IRAM_ATTR mxr_try_cross_region(
 #endif /* CONFIG_MXR_CROSS_REGION_FALLBACK */
 
 /* ================================================================
+ *  FIX(2.2): попытка 32BIT IRAM fallback вынесена в отдельную
+ *  функцию, чтобы порядок (IRAM-first / DRAM-first) задавался
+ *  конфигурацией CONFIG_MXR_IRAM_FB_ORDER_*.
+ * ================================================================ */
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
+static void *MXR_IRAM_ATTR mxr_try_iram_fallback(uint32_t bytes, uint32_t caps)
+{
+    if (!s_iram_enabled)
+        return NULL;
+    if (!mxr_caps_allow_iram_fallback(caps))
+        return NULL;
+    if (!mxr_iram_can_fallback(bytes))
+        return NULL;
+
+    int fb_reg = mxr_iram_fb_region_for_size(bytes);
+    uint32_t off_bytes = 0;
+    bool found = false;
+
+    /* Step 1: свой fb-регион */
+    if (fb_reg >= 0)
+    {
+        uint32_t alloc_bytes = bytes;
+        if (s_iram_fb_region[fb_reg].largest_cache_valid &&
+            s_iram_fb_region[fb_reg].largest_free_cache < bytes)
+        {
+            found = false; /* пропускаем Step 1, сразу в cross-region */
+        }
+        else
+        {
+            found = mxr_iram_fb_find_free_in_region(fb_reg, bytes,
+                                                    &off_bytes, &alloc_bytes);
+            if (!found)
+            {
+                uint32_t largest = mxr_iram_fb_region_largest_free(fb_reg);
+                s_iram_fb_region[fb_reg].largest_free_cache = largest;
+                s_iram_fb_region[fb_reg].largest_cache_valid = 1;
+            }
+        }
+        if (found)
+        {
+            if (mxr_iram_desc_insert(off_bytes, alloc_bytes, 0))
+            {
+                mxr_iram_allocated(off_bytes, alloc_bytes, false, true);
+                s_iram_fallback_allocs++;
+                s_stats.iram_fallback_allocs++;
+                return mxr_iram_off_to_ptr(off_bytes);
+            }
+            found = false;
+        }
+    }
+
+    /* Step 2: cross-region внутри IRAM fb */
+    uint32_t cross_alloc_bytes = bytes;
+#if defined(CONFIG_MXR_CROSS_REGION_FALLBACK) && \
+    defined(CONFIG_MXR_IRAM_CROSS_ENABLED)
+    if (!found)
+    {
+        found = mxr_iram_fb_try_cross_region(bytes, fb_reg,
+                                             &off_bytes, &cross_alloc_bytes);
+    }
+#endif
+    if (found)
+    {
+        if (mxr_iram_desc_insert(off_bytes, cross_alloc_bytes, 0))
+        {
+            mxr_iram_allocated(off_bytes, cross_alloc_bytes, false, true);
+            s_iram_fallback_allocs++;
+            s_stats.iram_fallback_allocs++;
+            return mxr_iram_off_to_ptr(off_bytes);
+        }
+    }
+    return NULL;
+}
+#endif /* CONFIG_MXR_USE_IRAM && CONFIG_MXR_IRAM_FALLBACK_ENABLED */
+/* ================================================================
  *  Locked allocation
  * ================================================================ */
 static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
@@ -2138,75 +2270,12 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
     }
 #endif
 
-#ifdef CONFIG_MXR_USE_IRAM
-    /* IRAM fallback for pure 32BIT (region-aware + cross-region) */
-    if (s_iram_enabled &&
-        mxr_caps_allow_iram_fallback(caps) &&
-        mxr_iram_can_fallback(bytes))
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FB_ORDER_IRAM_FIRST)
+    /* FIX(2.2): IRAM-first — старое поведение MxR */
     {
-        int fb_reg = mxr_iram_fb_region_for_size(bytes);
-        uint32_t off_bytes = 0;
-        bool found = false;
-
-        /* Step 1: свой fb-регион */
-        if (fb_reg >= 0)
-        {
-            uint32_t alloc_bytes = bytes;
-
-            /* НОВОЕ: быстрая проверка кэша перед полным поиском */
-            if (s_iram_fb_region[fb_reg].largest_cache_valid &&
-                s_iram_fb_region[fb_reg].largest_free_cache < bytes)
-            {
-                found = false; /* пропускаем Step 1, сразу в cross-region */
-            }
-            else
-            {
-                found = mxr_iram_fb_find_free_in_region(fb_reg, bytes,
-                                                        &off_bytes, &alloc_bytes);
-
-                /* FIX(4.2): если поиск не нашёл блок, обновляем largest cache,
-                 * чтобы повторные запросы не делали полный поиск. */
-                if (!found)
-                {
-                    uint32_t largest = mxr_iram_fb_region_largest_free(fb_reg);
-                    s_iram_fb_region[fb_reg].largest_free_cache = largest;
-                    s_iram_fb_region[fb_reg].largest_cache_valid = 1;
-                }
-            }
-
-            if (found)
-            {
-                if (mxr_iram_desc_insert(off_bytes, alloc_bytes, 0))
-                {
-                    mxr_iram_allocated(off_bytes, alloc_bytes, false, true);
-                    s_iram_fallback_allocs++;
-                    s_stats.iram_fallback_allocs++;
-                    return mxr_iram_off_to_ptr(off_bytes);
-                }
-                found = false;
-            }
-        }
-
-        /* Step 2: cross-region внутри IRAM fb */
-        uint32_t cross_alloc_bytes = bytes;
-        if (!found)
-        {
-#if defined(CONFIG_MXR_CROSS_REGION_FALLBACK) && \
-    defined(CONFIG_MXR_IRAM_CROSS_ENABLED)
-            found = mxr_iram_fb_try_cross_region(bytes, fb_reg,
-                                                 &off_bytes, &cross_alloc_bytes);
-#endif
-        }
-        if (found)
-        {
-            if (mxr_iram_desc_insert(off_bytes, cross_alloc_bytes, 0))
-            {
-                mxr_iram_allocated(off_bytes, cross_alloc_bytes, false, true);
-                s_iram_fallback_allocs++;
-                s_stats.iram_fallback_allocs++;
-                return mxr_iram_off_to_ptr(off_bytes);
-            }
-        }
+        void *iram_ptr = mxr_try_iram_fallback(bytes, caps);
+        if (iram_ptr)
+            return iram_ptr;
     }
 #endif
 
@@ -2236,6 +2305,15 @@ static void *MXR_IRAM_ATTR mxr_malloc_caps_locked(size_t size, uint32_t caps)
         void *fallback_ptr = mxr_try_cross_region(bytes, caps, region);
         if (fallback_ptr)
             return fallback_ptr;
+    }
+#endif
+
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FB_ORDER_DRAM_FIRST)
+    /* FIX(2.2): DRAM-first — IRAM только как настоящий fallback */
+    {
+        void *iram_ptr = mxr_try_iram_fallback(bytes, caps);
+        if (iram_ptr)
+            return iram_ptr;
     }
 #endif
 
@@ -2560,6 +2638,20 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
             in_place_allowed = false;
         }
 
+/* FIX(1.4): region_size_ok проверяется ДО любой модификации блока,
+ * и для shrink, и для grow. Раньше IRAM shrink мог оставить
+ * fallback-блок меньше min_bytes его региона. */
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
+        if (in_place_allowed && !old_exec)
+        {
+            int reg = mxr_iram_fb_region_by_off(off_bytes);
+            if (!mxr_iram_fb_region_size_ok(reg, new_bytes))
+                in_place_allowed = false;
+            else if (new_bytes > old_bytes &&
+                     !mxr_iram_can_grow_fallback(off_bytes, old_bytes, new_bytes))
+                in_place_allowed = false;
+        }
+#endif
         if (in_place_allowed)
         {
             if (new_bytes == old_bytes)
@@ -2567,11 +2659,10 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
                 mxr_unlock();
                 return ptr;
             }
-
             if (new_bytes < old_bytes)
             {
                 uint32_t diff = old_bytes - new_bytes;
-                /* НОВОЕ: Anti-sliver */
+                /* Anti-sliver */
                 if (MXR_IS_SLIVER(diff))
                 {
                     mxr_unlock();
@@ -2584,19 +2675,7 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
                 mxr_unlock();
                 return ptr;
             }
-
             uint32_t extra = new_bytes - old_bytes;
-
-            if (!old_exec)
-            {
-                int reg = mxr_iram_fb_region_by_off(off_bytes);
-                if (!mxr_iram_fb_region_size_ok(reg, new_bytes))
-                    in_place_allowed = false;
-                else if (!mxr_iram_can_grow_fallback(off_bytes, old_bytes, new_bytes))
-                    in_place_allowed = false;
-            }
-
-            if (in_place_allowed)
             {
                 uint32_t block_end = off_bytes + (uint32_t)old_bytes;
                 uint32_t next_boundary;
@@ -2611,6 +2690,7 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
                     if (next_boundary > zone_end)
                         next_boundary = zone_end;
                 }
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
                 else
                 {
                     int reg = mxr_iram_fb_region_by_off(off_bytes);
@@ -2621,7 +2701,7 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
                             next_boundary = reg_end;
                     }
                 }
-
+#endif
                 if (next_boundary >= block_end)
                 {
                     uint32_t gap = (uint32_t)(next_boundary - block_end);
@@ -2631,6 +2711,7 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
                         uint32_t actual_new_bytes = new_bytes;
                         /* ===== ИСПРАВЛЕНО: ограничение max_bytes ===== */
                         bool can_expand = MXR_IS_SLIVER(tail);
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
                         if (can_expand && !old_exec)
                         {
                             int reg = mxr_iram_fb_region_by_off(off_bytes);
@@ -2641,7 +2722,14 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
                                     old_bytes + gap > max_allowed)
                                     can_expand = false;
                             }
+                            if (can_expand &&
+                                CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES != 0 &&
+                                old_bytes + gap > (uint32_t)CONFIG_MXR_IRAM_FALLBACK_MAX_BYTES)
+                            {
+                                can_expand = false;
+                            }
                         }
+#endif
                         if (can_expand)
                         {
                             actual_new_bytes = old_bytes + gap;
@@ -2727,6 +2815,17 @@ static bool mxr_init_regions_exact(
                        (unsigned)percent_sum);
         return false;
     }
+    for (uint8_t i = 0; i < (uint8_t)(count - 1); i++)
+    {
+        if (cfg[i].percent == 0)
+        {
+            ESP_EARLY_LOGE(TAG,
+                           "region %u has percent 0 but is not last "
+                           "(only last region may have 0%%)",
+                           (unsigned)i);
+            return false;
+        }
+    }
 
     uint32_t expected_min = 0;
     for (uint8_t i = 0; i < count; i++)
@@ -2790,7 +2889,7 @@ static bool mxr_init_regions_exact(
         }
         else
         {
-            bytes = (uint32_t)(((uint64_t)s_arena_total_bytes * cfg[i].percent) / 100);
+            bytes = mxr_percent_of(s_arena_total_bytes, cfg[i].percent); /* FIX(1.5) */
             bytes = (uint32_t)mxr_align4((size_t)bytes);
         }
         if (bytes < (uint32_t)min_b)
@@ -2967,6 +3066,11 @@ void mxr_init(void)
 
     size_t bytes = (size_t)(end - start);
     bytes &= ~(size_t)MXR_ALIGN_MASK;
+    if (bytes == 0)
+    {
+        ESP_EARLY_LOGE(TAG, "DRAM arena size is 0 bytes, heap cannot be initialized");
+        return;
+    }
     if (bytes > MXR_MAX_ARENA_BYTES)
     {
         ESP_EARLY_LOGE(TAG, "arena too large: %u bytes", (unsigned)bytes);
@@ -3177,7 +3281,8 @@ static void mxr_collect_status_locked(mxr_status_t *status)
         s_stats.sliver_count = sliver_count;
         if (total_gap_bytes > 0 && dram_largest < total_gap_bytes)
         {
-            s_stats.fragmentation_pct = (uint32_t)(((uint64_t)(total_gap_bytes - dram_largest) * 100) / total_gap_bytes);
+            /* FIX(1.5): 32-бит достаточно (значение <= arena_total * 100) */
+            s_stats.fragmentation_pct = ((total_gap_bytes - dram_largest) * 100u) / total_gap_bytes;
         }
         else
         {
@@ -3226,7 +3331,7 @@ bool mxr_get_region_status(int region_index, mxr_region_status_t *status)
 }
 static bool mxr_collect_iram_fb_region_status_locked(int region_index, mxr_region_status_t *status)
 {
-#ifdef CONFIG_MXR_USE_IRAM
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
     if (!status)
         return false;
 
@@ -3274,53 +3379,8 @@ size_t mxr_get_free_size_caps(uint32_t caps)
 {
     if (!s_initialized)
         return 0;
-
-    size_t bytes = 0;
-
     mxr_lock();
-
-    for (uint8_t i = 0; i < s_region_count; i++)
-    {
-        if (mxr_region_caps_ok(i, caps))
-            bytes += (size_t)s_region[i].free_bytes;
-    }
-
-#ifdef CONFIG_MXR_USE_IRAM
-    if (s_iram_enabled)
-    {
-        if (caps & MALLOC_CAP_EXEC)
-        {
-            if ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL)) == 0)
-                bytes += (size_t)s_iram_exec_free_bytes; /* было: s_iram_free_bytes */
-        }
-#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
-        else if ((caps & MALLOC_CAP_32BIT) &&
-                 !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)))
-        {
-            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
-                bytes += (size_t)s_iram_fb_region[i].free_bytes;
-        }
-        else if ((caps & MALLOC_CAP_INTERNAL) &&
-                 !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)))
-        {
-            /* INTERNAL без 32BIT: IRAM fb имеет INTERNAL в caps */
-            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
-                bytes += (size_t)s_iram_fb_region[i].free_bytes;
-        }
-        else if (caps == 0)
-        {
-            /* FIX(2.3): caps == 0 может использовать только fallback-зону,
-             * EXEC-зона для caps == 0 недоступна.
-             *
-             * FIX(1.3): если fallback выключен, этот блок не должен
-             * добавлять IRAM fb free. */
-            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
-                bytes += (size_t)s_iram_fb_region[i].free_bytes;
-        }
-#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED */
-    }
-#endif
-
+    size_t bytes = mxr_get_free_size_caps_locked(caps);
     mxr_unlock();
     return bytes;
 }
@@ -3378,6 +3438,163 @@ size_t mxr_get_min_free_size_caps(uint32_t caps)
 }
 
 /* ================================================================
+ *  FIX(2.3): дополнительные стандартные heap_caps query API
+ * ================================================================ */
+size_t mxr_get_total_size_caps(uint32_t caps)
+{
+    if (!s_initialized)
+        return 0;
+    mxr_lock();
+    size_t bytes = mxr_get_total_size_caps_locked(caps);
+    mxr_unlock();
+    return bytes;
+}
+
+size_t mxr_get_largest_free_block_caps(uint32_t caps)
+{
+    if (!s_initialized)
+        return 0;
+    uint32_t largest = 0;
+    mxr_lock();
+    for (uint8_t i = 0; i < s_region_count; i++)
+    {
+        if (!mxr_region_caps_ok(i, caps))
+            continue;
+        uint32_t lr = mxr_region_largest_free_bytes(i);
+        if (s_region[i].max_bytes != MXR_REGION_MAX_UNLIMITED &&
+            lr > (uint32_t)s_region[i].max_bytes)
+            lr = (uint32_t)s_region[i].max_bytes;
+        if (lr > largest)
+            largest = lr;
+    }
+#ifdef CONFIG_MXR_USE_IRAM
+    if (s_iram_enabled)
+    {
+        if (caps & MALLOC_CAP_EXEC)
+        {
+            if ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL)) == 0)
+            {
+                uint32_t lr = mxr_iram_exec_largest_free();
+                if (lr > largest)
+                    largest = lr;
+            }
+        }
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
+        else if (((caps & MALLOC_CAP_32BIT) &&
+                  !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM))) ||
+                 ((caps & MALLOC_CAP_INTERNAL) &&
+                  !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM))) ||
+                 caps == 0)
+        {
+            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
+            {
+                uint32_t lr = mxr_iram_fb_region_largest_free((int)i);
+                if (s_iram_fb_region[i].max_bytes != MXR_REGION_MAX_UNLIMITED &&
+                    lr > (uint32_t)s_iram_fb_region[i].max_bytes)
+                    lr = (uint32_t)s_iram_fb_region[i].max_bytes;
+                if (lr > largest)
+                    largest = lr;
+            }
+        }
+#endif /* CONFIG_MXR_IRAM_FALLBACK_ENABLED */
+    }
+#endif /* CONFIG_MXR_USE_IRAM */
+    mxr_unlock();
+    return (size_t)largest;
+}
+
+/* ================================================================
+ *  Locked internals для total/free/allocated query
+ * ================================================================ */
+static size_t mxr_get_total_size_caps_locked(uint32_t caps)
+{
+    size_t bytes = 0;
+    for (uint8_t i = 0; i < s_region_count; i++)
+    {
+        if (mxr_region_caps_ok(i, caps))
+            bytes += (size_t)s_region[i].total_bytes;
+    }
+#ifdef CONFIG_MXR_USE_IRAM
+    if (s_iram_enabled)
+    {
+        if (caps & MALLOC_CAP_EXEC)
+        {
+            if ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL)) == 0)
+                bytes += (size_t)mxr_iram_exec_zone_end();
+        }
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
+        else if ((caps & MALLOC_CAP_32BIT) &&
+                 !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)))
+        {
+            bytes += (size_t)s_iram_fb_zone_total;
+        }
+        else if ((caps & MALLOC_CAP_INTERNAL) &&
+                 !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)))
+        {
+            bytes += (size_t)s_iram_fb_zone_total;
+        }
+        else if (caps == 0)
+        {
+            bytes += (size_t)s_iram_fb_zone_total;
+        }
+#endif
+    }
+#endif
+    return bytes;
+}
+
+static size_t mxr_get_free_size_caps_locked(uint32_t caps)
+{
+    size_t bytes = 0;
+    for (uint8_t i = 0; i < s_region_count; i++)
+    {
+        if (mxr_region_caps_ok(i, caps))
+            bytes += (size_t)s_region[i].free_bytes;
+    }
+#ifdef CONFIG_MXR_USE_IRAM
+    if (s_iram_enabled)
+    {
+        if (caps & MALLOC_CAP_EXEC)
+        {
+            if ((caps & ~(MALLOC_CAP_EXEC | MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL)) == 0)
+                bytes += (size_t)s_iram_exec_free_bytes;
+        }
+#ifdef CONFIG_MXR_IRAM_FALLBACK_ENABLED
+        else if ((caps & MALLOC_CAP_32BIT) &&
+                 !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)))
+        {
+            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
+                bytes += (size_t)s_iram_fb_region[i].free_bytes;
+        }
+        else if ((caps & MALLOC_CAP_INTERNAL) &&
+                 !(caps & (MALLOC_CAP_DMA | MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)))
+        {
+            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
+                bytes += (size_t)s_iram_fb_region[i].free_bytes;
+        }
+        else if (caps == 0)
+        {
+            for (uint8_t i = 0; i < s_iram_fb_region_count; i++)
+                bytes += (size_t)s_iram_fb_region[i].free_bytes;
+        }
+#endif
+    }
+#endif
+    return bytes;
+}
+
+size_t mxr_get_allocated_size_caps(uint32_t caps)
+{
+    if (!s_initialized)
+        return 0;
+    mxr_lock();
+    size_t total = mxr_get_total_size_caps_locked(caps);
+    size_t free_bytes = mxr_get_free_size_caps_locked(caps);
+    mxr_unlock();
+    return (total > free_bytes) ? (total - free_bytes) : 0;
+}
+
+/* ================================================================
  *  Dump
  * ================================================================ */
 void mxr_dump(void)
@@ -3387,7 +3604,7 @@ void mxr_dump(void)
     static mxr_region_status_t rs[MXR_ACTIVE_TOTAL_REGIONS];
     static bool rs_ok[MXR_ACTIVE_TOTAL_REGIONS];
 
-#ifdef CONFIG_MXR_USE_IRAM
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
     static mxr_region_status_t fb[MXR_IRAM_FB_REGION_COUNT];
     static bool fb_ok[MXR_IRAM_FB_REGION_COUNT];
 #endif
@@ -3455,7 +3672,7 @@ void mxr_dump(void)
     for (uint8_t i = 0; i < MXR_ACTIVE_TOTAL_REGIONS; i++)
         rs_ok[i] = mxr_collect_region_status_locked((int)i, &rs[i]);
 
-#ifdef CONFIG_MXR_USE_IRAM
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
     for (uint8_t i = 0; i < MXR_IRAM_FB_REGION_COUNT; i++)
         fb_ok[i] = mxr_collect_iram_fb_region_status_locked((int)i, &fb[i]);
 #endif
@@ -3586,7 +3803,7 @@ void mxr_dump(void)
                        (unsigned)st.iram_exec_zone_total_bytes,
                        (unsigned)st.iram_exec_zone_free_bytes,
                        (unsigned)st.exec_zone_rejects);
-
+#if defined(CONFIG_MXR_USE_IRAM) && defined(CONFIG_MXR_IRAM_FALLBACK_ENABLED)
         for (uint8_t i = 0;
              i < st.iram_fb_region_count && i < MXR_IRAM_FB_REGION_COUNT;
              i++)
@@ -3610,6 +3827,7 @@ void mxr_dump(void)
                            (unsigned)fb[i].largest_free_bytes,
                            (unsigned)fb[i].alloc_count);
         }
+#endif
     }
     else
     {
