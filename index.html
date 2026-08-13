@@ -335,8 +335,32 @@
       outline: 1px solid #fff
     }
 
+    #eeChart {
+      display: flex;
+      align-items: flex-end;
+      gap: 1px;
+      height: 96px;
+      background: #0a0d12;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px;
+      overflow-x: auto
+    }
+
+    .eecell {
+      flex: 0 0 auto;
+      width: 9px;
+      border-radius: 1px 1px 0 0;
+      cursor: pointer;
+      min-height: 4px
+    }
+
+    .eecell:hover {
+      outline: 1px solid #fff
+    }
+
     #log {
-      max-height: 1000px;
+      /* max-height: 1000px; */
       overflow-y: auto;
       background: #0a0d12;
       border: 1px solid var(--border);
@@ -455,7 +479,7 @@
 
     .scroll {
       overflow: auto;
-      max-height: 2000px
+      /* max-height: 2000px */
     }
 
     .presetBtns {
@@ -662,6 +686,15 @@
           <span><span class="chip" style="background:#ff6bcb"></span>IRAM expansion on malloc</span>
           <span><span class="chip" style="background:#3fb950"></span>realloc grow absorb</span>
           <span><span class="chip" style="background:#56d4dd"></span>realloc shrink protection</span>
+        </div>
+        <h3 style="margin-top:12px">Best-fit early-exit timeline (BEST_FIT_EARLY_EXIT events)</h3>
+        <p class="hint">Each column = one early-exit event, height ~ requested size. Green = exact fit (waste=0).
+          Hover for details. <span id="eeSummary" style="color:var(--txt)"></span></p>
+        <div id="eeChart"></div>
+        <div class="row" style="gap:12px;margin-top:4px">
+          <span><span class="chip" style="background:#4ea1ff"></span>DRAM early exit</span>
+          <span><span class="chip" style="background:#b48cff"></span>IRAM fb early exit</span>
+          <span><span class="chip" style="background:#3fb950"></span>Exact fit (waste = 0)</span>
         </div>
       </section>
 
@@ -893,6 +926,9 @@
     let afEvents = [];
     const AF_MAX = 400;
     function recordAF(e) { e.opNo = opNo; e.minSlice = cfg.minSlice; afEvents.push(e); if (afEvents.length > AF_MAX) afEvents.shift(); }
+    let eeEvents = [];
+    const EE_MAX = 400;
+    function recordEE(e) { e.opNo = opNo; e.wasteShift = cfg.wasteShift; e.earlyExitOn = cfg.earlyExit; eeEvents.push(e); if (eeEvents.length > EE_MAX) eeEvents.shift(); }
     function tr(msg, cls) { if (verbose) opTrace.push({ msg, cls: cls || 't-step' }); }
 
     function parseRegionConfig(s, maxCount) {
@@ -919,6 +955,9 @@
     function initRegionsExact(parsed, total) {
       let percentSum = 0; for (const c of parsed) percentSum += c.percent;
       if (percentSum > 100) throw `region percent sum = ${percentSum}%, must be <= 100`;
+      for (let i = 0; i < parsed.length - 1; i++) {
+        if (parsed[i].percent === 0) throw `region ${i} has percent 0 but is not last`;
+      }
       let expectedMin = 0;
       for (let i = 0; i < parsed.length; i++) {
         let minB = parsed[i].min_bytes || ALIGN, maxB = parsed[i].max_bytes;
@@ -980,6 +1019,9 @@
       }
       let pctSum = 0; for (const c of parsed) pctSum += c.percent;
       if (pctSum > 100) throw `IRAM fb: percent sum ${pctSum}% > 100`;
+      for (let i = 0; i < parsed.length - 1; i++) {
+        if (parsed[i].percent === 0) throw `region ${i} has percent 0 but is not last`;
+      }
       for (const c of parsed) c.min_bytes = Math.max(align4(c.min_bytes), ALIGN);
       for (let i = 1; i < parsed.length; i++)
         if (parsed[i].min_bytes <= parsed[i - 1].min_bytes) throw 'IRAM fb: boundaries must increase';
@@ -1011,7 +1053,7 @@
 
     function mxrInit() {
       const errEl = document.getElementById('cfgErr'); errEl.textContent = '';
-      opTrace = []; history = []; afEvents = [];
+      opTrace = []; history = []; afEvents = []; eeEvents = [];
       let dramTotal = Math.floor((cfg.dramSize || 0) / 4) * 4;
       if (!(dramTotal >= 1024)) dramTotal = 1024;
       S = {
@@ -1122,8 +1164,16 @@
       return -1;
     }
     function descInsert(descs, cap, off, len, exec) {
+      // FIX(5): проверка инициализации (в C: if (!s_initialized) return false)
+      if (!S.initialized) return { ok: false, r: 'not initialized' };
+      // FIX(5): для IRAM в C дополнительно проверяется s_iram_enabled
+      const isIram = (descs === S.iram.desc);
+      if (isIram && !S.iram.enabled) return { ok: false, r: 'IRAM heap disabled' };
       if (off > MAX_LEN) { S.stats.insertFailBounds++; return { ok: false, r: 'off > MAX_OFFSET' }; }
       if (len === 0 || len > MAX_LEN) { S.stats.insertFailBounds++; return { ok: false, r: 'len invalid' }; }
+      // FIX(1): проверка off+len <= arena_total (в C: desc_insert_fail_bounds)
+      const arenaTotal = isIram ? S.iram.total : S.dram.total;
+      if (off + len > arenaTotal) { S.stats.insertFailBounds++; return { ok: false, r: 'off+len exceeds arena bounds' }; }
       if (descs.length >= cap) { S.stats.failTableFull++; return { ok: false, r: 'descriptor table full (alloc_fail_table_full++)' }; }
       let l = 0, r = descs.length;
       while (l < r) { const m = (l + r) >> 1; if (descs[m].off < off) l = m + 1; else r = m; }
@@ -1209,6 +1259,7 @@
           if (waste <= wLimit) {
             S.stats.earlyExits++;
             tr(`    gap @${gapStart} size ${gap}: waste ${waste} <= limit ${wLimit} → EARLY EXIT`, 't-hit');
+            recordEE({ arena: 'dram', label, size: bytes, gap, waste, limit: wLimit, off: gapStart, exact: waste === 0 });
             const alloc = sliverExpand(gap, waste, maxAllowed, bytes, 'find_best_free', 'dram', label);
             return { stop: true, off: gapStart, alloc, largest, exact: false };
           }
@@ -1387,7 +1438,8 @@
         if (gap >= bytes) {
           const waste = gap - bytes;
           if (waste <= wLimit) {
-            S.stats.earlyExits++;  // ← перенести СЮДА, до ветвления
+            S.stats.earlyExits++;
+            recordEE({ arena: 'iram', label, size: bytes, gap, waste, limit: wLimit, off: gapStart, exact: waste === 0 });
             if (isSliver(waste) && (maxAllowed === UNLIMITED || gap <= maxAllowed)) {
               afExpansion('iram', label, bytes, waste, gap, 'iram fb best-fit');
               return { stop: true, off: gapStart, alloc: gap };
@@ -1481,27 +1533,6 @@
       }
       return null;
     }
-    function iramFbAccountAlloc(off, len) {
-      const end = off + len;
-      for (let i = 0; i < S.iram.fbRegions.length; i++) {
-        const r = S.iram.fbRegions[i], rs = r.start_byte, re = fbRegionEnd(i);
-        const lo = Math.max(off, rs), hi = Math.min(end, re);
-        if (lo < hi) {
-          const part = hi - lo;
-          r.free_bytes = r.free_bytes >= part ? r.free_bytes - part : 0;
-          if (r.free_bytes < r.min_free_bytes) r.min_free_bytes = r.free_bytes;
-          r.cache_valid = 0;
-        }
-      }
-    }
-    function iramFbAccountFree(off, len) {
-      const end = off + len;
-      for (let i = 0; i < S.iram.fbRegions.length; i++) {
-        const r = S.iram.fbRegions[i], rs = r.start_byte, re = fbRegionEnd(i);
-        const lo = Math.max(off, rs), hi = Math.min(end, re);
-        if (lo < hi) { r.free_bytes = Math.min(r.total_bytes, r.free_bytes + (hi - lo)); r.cache_valid = 0; }
-      }
-    }
     function iramFbRegionAllocated(reg, bytes, countBlock) {
       if (reg < 0 || reg >= S.iram.fbRegions.length) return;
       const r = S.iram.fbRegions[reg];
@@ -1523,7 +1554,7 @@
       S.stats.freeBytes = S.stats.freeBytes >= bytes ? S.stats.freeBytes - bytes : 0;
       if (S.stats.freeBytes < S.stats.minFreeBytes) S.stats.minFreeBytes = S.stats.freeBytes;
       if (isExec) {
-        iramFbAccountAlloc(off, bytes);
+        // FIX(2): EXEC не трогает fb-регионы (зоны не пересекаются) — как в C
         S.iram.execFree = S.iram.execFree >= bytes ? S.iram.execFree - bytes : 0;
         if (S.iram.execFree < S.iram.execMinFree) S.iram.execMinFree = S.iram.execFree;
       }
@@ -1533,7 +1564,7 @@
       S.iram.freeBytes = Math.min(S.iram.total, S.iram.freeBytes + bytes);
       S.stats.freeBytes = Math.min(S.stats.totalBytes, S.stats.freeBytes + bytes);
       if (isExec) {
-        iramFbAccountFree(off, bytes);
+        // FIX(2): EXEC не трогает fb-регионы — как в C
         const cap = iramExecZoneEnd();
         const nf = S.iram.execFree + bytes;
         S.iram.execFree = nf > cap ? cap : nf;
@@ -1831,15 +1862,12 @@
       }
       tr(`  IRAM realloc: old=${oldBytes} new=${newBytes} exec=${oldExec} inPlaceAllowed=${inPlaceAllowed}`);
       const irLabel = oldExec ? 'EXEC zone' : ('IRAM fb r' + iramFbRegionByOff(off));
-      if (inPlaceAllowed) {
-        if (newBytes === oldBytes) return ptr;
-        // FIX(1.4): region_size_ok ДО любой модификации (и shrink, и grow)
-        if (!oldExec) {
-          const reg = iramFbRegionByOff(off);
-          if (!iramFbRegionSizeOk(reg, newBytes)) inPlaceAllowed = false;
-          else if (newBytes > oldBytes &&
-            !iramCanGrowFallback(off, oldBytes, newBytes)) inPlaceAllowed = false;
-        }
+      // FIX(1.4): region_size_ok ПЕРЕД early-return (как в C), и без дубля
+      if (inPlaceAllowed && !oldExec) {
+        const reg = iramFbRegionByOff(off);
+        if (!iramFbRegionSizeOk(reg, newBytes)) inPlaceAllowed = false;
+        else if (newBytes > oldBytes &&
+          !iramCanGrowFallback(off, oldBytes, newBytes)) inPlaceAllowed = false;
       }
       if (inPlaceAllowed) {
         if (newBytes === oldBytes) return ptr;
@@ -1880,6 +1908,9 @@
               if (reg >= 0) {
                 const ma = S.iram.fbRegions[reg].max_bytes;
                 if (ma !== UNLIMITED && oldBytes + gap > ma) canExpand = false;
+              }
+              if (canExpand && cfg.fbMax !== 0 && oldBytes + gap > cfg.fbMax) {
+                canExpand = false;
               }
             }
             if (canExpand) {
@@ -2035,11 +2066,11 @@
     function showTip(e, text) { tooltip.textContent = text; tooltip.style.display = 'block'; moveTip(e); }
     function hideTip() { tooltip.style.display = 'none'; }
     document.addEventListener('mouseover', e => {
-      const b = e.target.closest ? e.target.closest('.blk,.hcell,.afcell') : null;
+      const b = e.target.closest ? e.target.closest('.blk,.hcell,.afcell,.eecell') : null;
       if (b && b.dataset.tip) showTip(e, b.dataset.tip);
     });
     document.addEventListener('mousemove', e => {
-      const b = e.target.closest ? e.target.closest('.blk,.hcell,.afcell') : null;
+      const b = e.target.closest ? e.target.closest('.blk,.hcell,.afcell,.eecell') : null;
       if (b && b.dataset.tip) {
         if (tooltip.style.display === 'block') moveTip(e); else showTip(e, b.dataset.tip);
       } else if (tooltip.style.display === 'block') {
@@ -2047,7 +2078,7 @@
       }
     });
     document.addEventListener('mouseout', e => {
-      const b = e.target.closest ? e.target.closest('.blk,.hcell,.afcell') : null;
+      const b = e.target.closest ? e.target.closest('.blk,.hcell,.afcell,.eecell') : null;
       if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) hideTip();
     });
     window.addEventListener('scroll', hideTip, true);
@@ -2154,6 +2185,35 @@
         return `<div class="afcell" style="height:${barH}px;background-color:${afColor(e)}" data-tip="${afTip(e).replace(/"/g, '&quot;')}"></div>`;
       }).join('');
     }
+    function eeTip(e) {
+      return `#${e.opNo} · ${e.arena === 'dram' ? 'DRAM' : 'IRAM fb'} early exit\n` +
+        `${e.label} · requested ${e.size} B\n` +
+        `gap ${e.gap} B @${e.off} · waste ${e.waste} B ≤ limit ${e.limit} B\n` +
+        `waste_shift=${e.wasteShift} · ${e.exact ? 'EXACT FIT' : 'approximate'} · ${e.earlyExitOn ? 'early-exit ON' : 'strict best-fit'}`;
+    }
+    function eeColor(e) {
+      if (e.exact) return '#3fb950';
+      return e.arena === 'iram' ? '#b48cff' : '#4ea1ff';
+    }
+    function renderEEChart() {
+      const el = document.getElementById('eeChart');
+      const sum = document.getElementById('eeSummary');
+      const dramCnt = eeEvents.filter(e => e.arena === 'dram').length;
+      const iramCnt = eeEvents.filter(e => e.arena === 'iram').length;
+      const exactCnt = eeEvents.filter(e => e.exact).length;
+      sum.textContent = `— events: ${eeEvents.length} total (DRAM ${dramCnt} · IRAM ${iramCnt} · exact ${exactCnt})`;
+      if (!eeEvents.length) {
+        el.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px">no early-exit events yet — allocate some blocks or run the stress test</div>';
+        return;
+      }
+      const H = 88, maxLog = Math.log2(16384);
+      el.innerHTML = eeEvents.map((e) => {
+        const v = Math.max(e.size, 4);
+        const barH = Math.max(4, Math.min(H - 8, Math.round(Math.log2(v) / maxLog * (H - 12)) + 4));
+        return `<div class="eecell" style="height:${barH}px;background-color:${eeColor(e)}" data-tip="${eeTip(e).replace(/"/g, '&quot;')}"></div>`;
+      }).join('');
+    }
+
     function renderAllocs() {
       const tb = document.querySelector('#allocTable tbody');
       const list = Object.entries(allocs).map(([p, a]) => ({ p: +p, ...a })).sort((x, y) => x.arena === y.arena ? x.off - y.off : (x.arena === 'iram' ? -1 : 1));
@@ -2188,8 +2248,7 @@
         S.iram.fbRegions.map((r, i) => row(r, i, clampLargest(iramFbRegionLargest(i), r.max_bytes))).join('') :
         '<tr><td colspan="8" class="l">IRAM disabled</td></tr>';
     }
-    function renderAll() { if (!S) return; renderMaps(); renderHistory(); renderAFChart(); renderAllocs(); renderStats(); }
-
+    function renderAll() { if (!S) return; renderMaps(); renderHistory(); renderAFChart(); renderEEChart(); renderAllocs(); renderStats(); }
     const logEl = document.getElementById('log');
     let logCount = 0;
     function logLine(msg, cls) {
