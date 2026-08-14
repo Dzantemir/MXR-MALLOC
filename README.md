@@ -1,4 +1,12 @@
 <p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo-full.svg"/>
+    <source media="(prefers-color-scheme: light)" srcset="logo-full-light.svg"/>
+    <img src="logo-full-light.svg" width="480" alt="MxR-Malloc"/>
+  </picture>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/platform-ESP8266-blue?logo=espressif" alt="Platform"/>
   <img src="https://img.shields.io/badge/SDK-ESP8266--RTOS--SDK-orange" alt="SDK"/>
   <img src="https://img.shields.io/badge/version-3.2-brightgreen" alt="Version"/>
