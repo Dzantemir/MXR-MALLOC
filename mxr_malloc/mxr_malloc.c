@@ -331,6 +331,30 @@ static void MXR_IRAM_ATTR mxr_dram_desc_remove(int index)
     mxr_desc_clear(&s_dram_desc[s_dram_desc_count]);
 }
 
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+/* Возвращает индекс первого DRAM-дескриптора, у которого конец блока
+ * (off + len) > min_off. Дескрипторы отсортированы по off и не
+ * пересекаются, поэтому (off+len) строго возрастает и бинарный поиск
+ * корректен. Все дескрипторы с индексом < результата лежат ЦЕЛИКОМ
+ * до min_off и не могут создавать gap внутри региона. */
+static uint16_t MXR_IRAM_ATTR mxr_dram_desc_first_after(uint32_t min_off)
+{
+    uint16_t left = 0;
+    uint16_t right = s_dram_desc_count;
+    while (left < right)
+    {
+        uint16_t mid = (uint16_t)((left + right) >> 1);
+        uint32_t end = mxr_desc_off(&s_dram_desc[mid]) +
+                       mxr_desc_len(&s_dram_desc[mid]);
+        if (end <= min_off)
+            left = (uint16_t)(mid + 1);
+        else
+            right = mid;
+    }
+    return left;
+}
+#endif /* MXR_DESC_BINARY_SEARCH_ACTIVE */
+
 /* ================================================================
  *  IRAM descriptor array operations
  * ================================================================ */
@@ -580,6 +604,27 @@ static void MXR_IRAM_ATTR mxr_iram_desc_remove(int index)
     s_iram_desc_count--;
     mxr_desc_clear(&s_iram_desc[s_iram_desc_count]);
 }
+
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+/* Аналог mxr_dram_desc_first_after для IRAM-дескрипторов. */
+static uint16_t MXR_IRAM_ATTR mxr_iram_desc_first_after(uint32_t min_off)
+{
+    uint16_t left = 0;
+    uint16_t right = s_iram_desc_count;
+    while (left < right)
+    {
+        uint16_t mid = (uint16_t)((left + right) >> 1);
+        uint32_t end = mxr_desc_off(&s_iram_desc[mid]) +
+                       mxr_desc_len(&s_iram_desc[mid]);
+        if (end <= min_off)
+            left = (uint16_t)(mid + 1);
+        else
+            right = mid;
+    }
+    return left;
+}
+#endif /* MXR_DESC_BINARY_SEARCH_ACTIVE */
+
 #endif /* CONFIG_MXR_USE_IRAM */
 
 /* ================================================================
@@ -648,8 +693,11 @@ static uint32_t MXR_IRAM_ATTR mxr_region_largest_free_bytes(uint8_t region_index
     uint32_t region_end = region_start + (uint32_t)s_region[region_index].total_bytes;
     uint32_t cur = region_start;
     uint32_t largest = 0;
-
-    for (uint16_t i = 0; i < s_dram_desc_count; i++)
+    uint16_t start_idx = 0;
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+    start_idx = mxr_dram_desc_first_after(region_start);
+#endif
+    for (uint16_t i = start_idx; i < s_dram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_dram_desc[i]);
         uint32_t len = mxr_desc_len(&s_dram_desc[i]);
@@ -769,6 +817,10 @@ static bool MXR_IRAM_ATTR mxr_find_best_free(
     uint32_t best_gap = UINT32_MAX;
     bool found = false;
     uint32_t largest = 0;
+    uint16_t start_idx = 0;
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+    start_idx = mxr_dram_desc_first_after(region_start);
+#endif
 #if MXR_EARLY_EXIT_ACTIVE
     uint32_t waste_limit = bytes >> MXR_BEST_FIT_WASTE_SHIFT;
     if (waste_limit < MXR_ALIGN_SIZE)
@@ -779,7 +831,7 @@ static bool MXR_IRAM_ATTR mxr_find_best_free(
     uint32_t waste_limit = 0;
 #endif
 
-    for (uint16_t i = 0; i < s_dram_desc_count; i++)
+    for (uint16_t i = start_idx; i < s_dram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_dram_desc[i]);
         uint32_t len = mxr_desc_len(&s_dram_desc[i]);
@@ -913,7 +965,10 @@ static bool MXR_IRAM_ATTR mxr_find_free_and_largest(
     uint32_t best_off = 0;
     uint32_t best_gap = UINT32_MAX;
     bool found = false;
-
+    uint16_t start_idx = 0;
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+    start_idx = mxr_dram_desc_first_after(region_start);
+#endif
 #if MXR_EARLY_EXIT_ACTIVE
     uint32_t waste_limit = bytes >> MXR_BEST_FIT_WASTE_SHIFT;
     if (waste_limit < MXR_ALIGN_SIZE)
@@ -924,7 +979,7 @@ static bool MXR_IRAM_ATTR mxr_find_free_and_largest(
     uint32_t waste_limit = 0;
 #endif
 
-    for (uint16_t i = 0; i < s_dram_desc_count; i++)
+    for (uint16_t i = start_idx; i < s_dram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_dram_desc[i]);
         uint32_t len = mxr_desc_len(&s_dram_desc[i]);
@@ -1106,7 +1161,10 @@ static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_in_region(
     uint32_t best_off = 0;
     uint32_t best_gap = UINT32_MAX;
     bool found = false;
-
+    uint16_t start_idx = 0;
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+    start_idx = mxr_iram_desc_first_after(reg_start);
+#endif
 #if MXR_EARLY_EXIT_ACTIVE
     uint32_t waste_limit = bytes >> MXR_BEST_FIT_WASTE_SHIFT;
     if (waste_limit < MXR_ALIGN_SIZE)
@@ -1115,7 +1173,7 @@ static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_in_region(
     uint32_t waste_limit = 0;
 #endif
 
-    for (uint16_t i = 0; i < s_iram_desc_count; i++)
+    for (uint16_t i = start_idx; i < s_iram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_iram_desc[i]);
         uint32_t len = mxr_desc_len(&s_iram_desc[i]);
@@ -1243,8 +1301,11 @@ static bool MXR_IRAM_ATTR mxr_iram_fb_find_free_and_largest(
     uint32_t best_off = 0;
     uint32_t best_gap = UINT32_MAX;
     bool found = false;
-
-    for (uint16_t i = 0; i < s_iram_desc_count; i++)
+    uint16_t start_idx = 0;
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+    start_idx = mxr_iram_desc_first_after(reg_start);
+#endif
+    for (uint16_t i = start_idx; i < s_iram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_iram_desc[i]);
         uint32_t len = mxr_desc_len(&s_iram_desc[i]);
@@ -1456,8 +1517,11 @@ static uint32_t MXR_IRAM_ATTR mxr_iram_fb_region_largest_free(int reg)
     uint32_t reg_end = mxr_iram_fb_region_end(reg);
     uint32_t cur = reg_start;
     uint32_t largest = 0;
-
-    for (uint16_t i = 0; i < s_iram_desc_count; i++)
+    uint16_t start_idx = 0;
+#if MXR_DESC_BINARY_SEARCH_ACTIVE
+    start_idx = mxr_iram_desc_first_after(reg_start);
+#endif
+    for (uint16_t i = start_idx; i < s_iram_desc_count; i++)
     {
         uint32_t off = mxr_desc_off(&s_iram_desc[i]);
         uint32_t len = mxr_desc_len(&s_iram_desc[i]);
@@ -1522,12 +1586,10 @@ static void MXR_IRAM_ATTR mxr_iram_fb_region_released(int reg, uint32_t bytes,
 /* ================================================================
  *  IRAM global accounting (region-aware via offset)
  *
- *  ИСПРАВЛЕНО: добавлен параметр is_exec.
- *  - EXEC-блоки учитываются через overlap-функции
- *    mxr_iram_fb_account_alloc/_free (EXEC может пересекать
- *    границы fb-регионов).
- *  - Fallback-блоки учитываются через mxr_iram_fb_region_allocated/
- *    _released (полностью внутри одного региона).
+ *  EXEC-зона [0, reserve) и fb-зона [reserve, end) не пересекаются.
+ *  - EXEC-блоки: обновляют s_iram_exec_free_bytes напрямую.
+ *  - Fallback-блоки: обновляют fb_region через
+ *    mxr_iram_fb_region_allocated/_released.
  * ================================================================ */
 static void MXR_IRAM_ATTR mxr_iram_allocated(uint32_t off_bytes,
                                              uint32_t bytes,
@@ -2179,6 +2241,7 @@ static void *MXR_IRAM_ATTR mxr_try_iram_fallback(uint32_t bytes, uint32_t caps)
             mxr_iram_allocated(off_bytes, cross_alloc_bytes, false, true);
             s_iram_fallback_allocs++;
             s_stats.iram_fallback_allocs++;
+            s_stats.cross_region_allocs++;
             return mxr_iram_off_to_ptr(off_bytes);
         }
     }
@@ -2488,11 +2551,17 @@ void *MXR_IRAM_ALLOC_ATTR mxr_realloc_caps(void *ptr, size_t newsize, uint32_t c
     }
 
     if (newsize > MXR_MAX_LEN_BYTES)
+    {
+        s_stats.alloc_fail_no_memory++;
         return NULL;
+    }
 
     newsize = mxr_align4(newsize);
     if (newsize == 0 || newsize > MXR_MAX_LEN_BYTES)
+    {
+        s_stats.alloc_fail_no_memory++;
         return NULL;
+    }
 
     uint32_t new_bytes = (uint32_t)newsize;
     if (new_bytes == 0)
@@ -3093,7 +3162,11 @@ void mxr_init(void)
 
     mxr_memset4(&s_stats, sizeof(s_stats));
     s_stats.dram_desc_capacity = CONFIG_MXR_MAX_DESC;
+#ifdef CONFIG_MXR_USE_IRAM
     s_stats.iram_desc_capacity = CONFIG_MXR_IRAM_MAX_DESC;
+#else
+    s_stats.iram_desc_capacity = 0;
+#endif
 
 #ifdef CONFIG_MXR_USE_IRAM
     mxr_init_iram();

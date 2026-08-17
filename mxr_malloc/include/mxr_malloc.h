@@ -44,6 +44,12 @@ extern "C"
 #define MXR_PARSED_REGION_COUNT 1
 #endif
 
+#ifdef CONFIG_MXR_DESC_BINARY_SEARCH
+#define MXR_DESC_BINARY_SEARCH_ACTIVE 1
+#else
+#define MXR_DESC_BINARY_SEARCH_ACTIVE 0
+#endif
+
 #if MXR_PARSED_REGION_COUNT > MXR_REGIONS_MAX
 #undef MXR_PARSED_REGION_COUNT
 #define MXR_PARSED_REGION_COUNT MXR_REGIONS_MAX
@@ -98,7 +104,7 @@ extern "C"
 /* FIX(4.1): waste == 0 больше не считается sliver.
    Иначе exact-fit попадал в anti_sliver_expansions. */
 #define MXR_IS_SLIVER(x) \
-    ((uint32_t)(x) > 0 && (uint32_t)(x) < (uint32_t)MXR_MIN_SLICE_BYTES)
+  ((uint32_t)(x) > 0 && (uint32_t)(x) < (uint32_t)MXR_MIN_SLICE_BYTES)
 #else
 #define MXR_MIN_SLICE_BYTES 0
 #define MXR_IS_SLIVER(x) ((void)(x), 0)
@@ -279,13 +285,6 @@ typedef uint32_t mxr_count_t;
 
   _Static_assert(sizeof(mxr_desc_t) == 8, "desc must be 8 bytes");
 
-
-  /* Запрет 64-битных операций в IRAM-коде — они генерируют
-   вызовы __muldi3/__udivdi3 из flash, что недопустимо
-   при отключённом flash cache */
-#ifdef CONFIG_MXR_USE_IRAM
-#pragma GCC poison __muldi3 __udivdi3 __umulsidi3
-#endif
   /* ================================================================
    *  Region configuration (build-time)
    * ================================================================ */
@@ -371,19 +370,19 @@ typedef uint32_t mxr_count_t;
     uint32_t sliver_count;           /* gaps < MXR_MIN_SLICE_BYTES */
     uint32_t best_fit_early_exits;   /* сколько раз best-fit сработал рано */
     uint32_t anti_sliver_expansions; /* сколько раз блок расширен до полного gap */
-      /* FIX(3.2): причины пропуска cross-region */
-     uint32_t cross_caps_skips;
-     uint32_t cross_free_skips;
-     uint32_t cross_cache_skips;
+                                     /* FIX(3.2): причины пропуска cross-region */
+    uint32_t cross_caps_skips;
+    uint32_t cross_free_skips;
+    uint32_t cross_cache_skips;
 
-     /* FIX(3.3): причины отказа вставки дескриптора */
-     uint32_t desc_insert_fail_bounds;
-     uint32_t desc_insert_fail_overlap;
-     uint32_t desc_insert_fail_duplicate;
+    /* FIX(3.3): причины отказа вставки дескриптора */
+    uint32_t desc_insert_fail_bounds;
+    uint32_t desc_insert_fail_overlap;
+    uint32_t desc_insert_fail_duplicate;
 
-     /* FIX(4.3): region init fallback */
-     bool region_init_fallback;
-     bool iram_fb_region_init_fallback;
+    /* FIX(4.3): region init fallback */
+    bool region_init_fallback;
+    bool iram_fb_region_init_fallback;
   } mxr_status_t;
 
   /* ДОБАВЛЕНО: проверка кратности 4 для mxr_memset4 */
@@ -395,6 +394,10 @@ typedef uint32_t mxr_count_t;
    * ================================================================ */
   static inline size_t MXR_IRAM_INLINE_ATTR mxr_align4(size_t bytes)
   {
+    if (bytes > (SIZE_MAX - MXR_ALIGN_MASK))
+    {
+      return SIZE_MAX;
+    }
     return (bytes + MXR_ALIGN_MASK) & ~(size_t)MXR_ALIGN_MASK;
   }
 
@@ -445,6 +448,9 @@ typedef uint32_t mxr_count_t;
   bool mxr_get_region_status(int region_index, mxr_region_status_t *status);
   bool mxr_get_iram_fb_region_status(int region_index, mxr_region_status_t *status);
   void mxr_dump(void);
+  size_t mxr_get_total_size_caps(uint32_t caps);
+  size_t mxr_get_largest_free_block_caps(uint32_t caps);
+  size_t mxr_get_allocated_size_caps(uint32_t caps);
 
   /* ESP heap compatibility layer */
   void _heap_caps_free(void *ptr, const char *file, size_t line);
@@ -458,6 +464,9 @@ typedef uint32_t mxr_count_t;
   void heap_caps_init(void);
   void *heap_caps_malloc_default(size_t size);
   void *heap_caps_realloc_default(void *ptr, size_t size);
+  size_t heap_caps_get_total_size(uint32_t caps);
+  size_t heap_caps_get_allocated_size(uint32_t caps);
+  size_t heap_caps_get_largest_free_block(uint32_t caps);
 
   /* Capability-aware MxR API */
   void *mxr_malloc_caps(size_t size, uint32_t caps);
