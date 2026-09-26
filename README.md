@@ -19,8 +19,8 @@
 <p align="center">
   <b>Region-based capability-aware memory allocator for ESP8266</b><br/>
   Drop-in replacement for the SDK heap with size-class regions, a hard-bound
-  IRAM EXEC zone, region-aware IRAM fallback, anti-sliver expansion and
-  zero-copy descriptors.
+  IRAM EXEC zone, region-aware IRAM fallback, anti-sliver expansion,
+  zero-copy descriptors and a Kconfig-selectable, load-store-safe IRAM layout.
 </p>
 
 ## 🎯 Why MxR-Malloc?
@@ -48,6 +48,10 @@ dedicated, hard-reserved zone at the start of IRAM.
 | Fragmentation control | ❌ | ✅ per-region isolation |
 | Cross-region fallback | — | ✅ directional, per-arena guards |
 | IRAM-safe hot path | partial | ✅ malloc/free in IRAM |
+| **IRAM byte/half-word access** | silently emulated by an exception handler (see [IRAM safety](#-iram-safety)) | ✅ **impossible by construction**: state is either in DRAM or all-32-bit |
+| Placement audit | ❌ | ✅ `tools/check_iram_widths.py` (CI-friendly) |
+| Per-allocation placement hint | ❌ | ✅ `MXR_CAP_PREFER_IRAM` (soft "IRAM first") |
+| Query cost of free space | O(n) walk | O(1) quick-fit hint, optional binning |
 | Heap tracing compat | ✅ | ⚠️ wrap mode only |
 | Descriptor overhead | 8 B per block header | 8 B per descriptor (out-of-band) |
 
@@ -83,6 +87,14 @@ dedicated, hard-reserved zone at the start of IRAM.
 │  │ s_dram_desc[256]   │  s_iram_desc[128]       │                   │
 │  │ sorted by offset   │  sorted by offset       │                   │
 │  └──────────────────────────────────────────────┘                   │
+│                                                                     │
+│  Static state (not part of the arenas):                             │
+│  ┌──────────────────────────────────────────────┐                   │
+│  │ s_stats  (mxr_status_t)                      │                   │
+│  │ s_region[N] / s_iram_fb_region[M]            │                   │
+│  │ → DRAM (.bss) by default, or IRAM with       │                   │
+│  │   all-32-bit fields (see IRAM safety)        │                   │
+│  └──────────────────────────────────────────────┘                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -98,7 +110,8 @@ carry `8BIT`/`DMA`/`SPIRAM`) live here, split into size-class regions.
 Inside a region the search is **best-fit with early-exit**; among equal gaps
 the higher address is preferred, and the block is placed at the **top** of
 the chosen gap so that the low-address side stays free for EXEC-adjacent
-usage.
+usage. `MXR_CAP_PREFER_IRAM` lets a caller ask for IRAM first regardless of
+the global order.
 
 **Descriptor format (8 bytes)** — no in-band headers, zero per-block overhead,
 no coalescing needed, free is an O(log n) binary search:
@@ -109,10 +122,149 @@ len_flags (uint32_t):   [31]    EXEC flag
                         [30..0] length in bytes
 ```
 
+## 🧱 IRAM safety
+
+### The rule
+
+ESP8266 (LX106) can access IRAM (`0x40100000..`) **only with 32-bit
+loads/stores**. Any 8- or 16-bit access, and any unaligned 32-bit access, is
+not executed by the core — it raises `EXCCAUSE_LOAD_STORE_ERROR`.
+
+### Why violations do not crash immediately
+
+The SDK hides this. `startup.c` installs exception vectors before user code
+runs, with an explicit comment about non-4-byte accesses:
+
+```c
+/* exception vect must be initialized. And then user can load/store
+   data which is not aligned by 4-byte */
+__asm__ __volatile__("movi a0, 0x40100000\n wsr a0, vecbase");
+```
+
+`LoadStoreErrorHandler` (`components/freertos/port/esp8266/xtensa_vectors.S`)
+then emulates exactly five opcodes — `l8ui`, `l16si`, `l16ui` (loads) and
+`s8i`, `s16i` (stores, implemented as read-modify-write of the containing
+word). Everything else goes to `_xt_ext_panic()`.
+
+So byte/half-word accesses to IRAM **work** — at the cost of a full exception
+per access: register save, opcode decode at `EPC1`, emulation, `EPC1 += 3`,
+`SAR` restore, `rfe`. That happens on a fixed 28-byte handler stack with a
+single re-entry slot, and in MxR-Malloc it happens **inside `mxr_lock()`**,
+i.e. with interrupts disabled. This is latency, not corruption — which is why
+the mistake is easy to ship.
+
+> Historical note: an earlier revision placed `s_stats`, `s_region[]` and
+> `s_iram_fb_region[]` into IRAM while they still had `bool` / `uint8_t` /
+> `uint16_t` fields. A source-level audit found **132 sub-32-bit accesses to
+> IRAM objects, 17 of them in the `malloc`/`free`/`realloc` hot path**
+> (`mxr_region_for_size`, `mxr_region_size_ok`, `mxr_region_caps_ok`,
+> `mxr_region_invalidate_cache`, `mxr_free_locked`, …). Nothing crashed —
+> every one of those accesses was being emulated by the handler.
+
+### What the code enforces now
+
+State objects (`s_stats`, `s_region[]`, `s_iram_fb_region[]`) are declared with
+`MXR_STATE_DATA_ATTR`, whose meaning is chosen in `menuconfig`:
+
+| | **Variant A — `MXR_STATE_IN_DRAM`** | **Variant B — `MXR_STATE_IN_IRAM`** (default when tables are in IRAM) |
+| --- | --- | --- |
+| Attribute | empty → objects land in `.bss` | `MXR_IRAM_DATA_ATTR` → objects stay in IRAM |
+| Field widths | natural (`bool`/`uint8_t`/`uint16_t`, `COMPACT_TYPES` applies) | forced to 32 bit via `MXR_FIELD_BOOL` / `_U8` / `_U16`; `COMPACT_TYPES` stops applying to `mxr_region_t` / `mxr_status_t` |
+| Size-class typedefs | `uint16_t` under `COMPACT_TYPES` | forced `uint32_t` |
+| Static state bytes¹ | `232 + 44 × (N + M)` in **DRAM** | `256 + 48 × (N + M)` in **IRAM** |
+| Regression barrier | external audit only | `_Static_assert` barrier **fails the build** if any placed field is not 32 bit |
+| Pick it when | DRAM is available and you want the smallest diff | DRAM is scarce (lwIP profiles) and IRAM can absorb ~50–70 B |
+
+¹ `N` = DRAM size-class regions, `M` = IRAM fallback regions; measured with
+`MXR_QUICK_FIT_HINT_ENABLE=y`, `MXR_BINNING=n`. Enabling `MXR_BINNING` widens
+`mxr_region_t` by 24 B per region (bin arrays), disabling the quick-fit hint
+shrinks it by 8 B. Example: 4 DRAM regions + 2 fallback regions → variant A
+takes **496 B of DRAM**, variant B takes **544 B of IRAM** (Δ = 48 B).
+
+Two guard rails in `include/mxr_malloc.h`:
+
+```c
+/* state in IRAM is only possible together with IRAM descriptor tables */
+#if defined(CONFIG_MXR_STATE_IN_IRAM) && !MXR_IRAM_PLACEMENT_ACTIVE
+#error "CONFIG_MXR_STATE_IN_IRAM requires IRAM descriptor placement ..."
+#endif
+
+/* in variant B every field of a placed type must be one word wide */
+MXR_ASSERT_WORD_FIELD(mxr_region_t, max_bytes);
+MXR_ASSERT_WORD_FIELD(mxr_status_t, max_active_allocs);
+/* ... */
+```
+
+Values that bypass `COMPACT_TYPES` on purpose: the quick-fit hint fields
+(`hint_len`, `hint_len[MXR_BIN_COUNT]`) are always `uint32_t` — they cache
+byte lengths and are not part of the size-class packing.
+
+### Audit your tree
+
+`tools/check_iram_widths.py` is a dependency-free, source-level audit of the
+rule. It resolves `MXR_STATE_DATA_ATTR` / `MXR_IRAM_DATA_ATTR` objects, computes
+field widths **for both placement variants**, follows aliases such as
+`mxr_region_t *r = &s_region[0]`, and classifies each access as hot or cold
+path:
+
+```bash
+python3 tools/check_iram_widths.py mxr_malloc/        # exit 1 if it finds anything
+```
+
+```
+РЕЖИМ B (MXR_STATE_PLACEMENT = IRAM, поля 32 бита)
+  s_stats                : mxr_status_t   -> безопасно (все поля 32-бит)
+  s_region               : mxr_region_t   -> безопасно (все поля 32-бит)
+  Нарушений не найдено.
+РЕЖИМ A (MXR_STATE_PLACEMENT = DRAM, состояние в .bss)
+  Нарушений не найдено.
+ИТОГ: нарушений нет ни в одном проверенном режиме.
+```
+
+Wire it into the build so the rule cannot silently regress:
+
+```cmake
+execute_process(COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_iram_widths.py
+                        ${CMAKE_CURRENT_SOURCE_DIR}
+                RESULT_VARIABLE mxr_audit)
+if(NOT mxr_audit EQUAL 0)
+    message(FATAL_ERROR "MxR IRAM width audit failed (see output above)")
+endif()
+```
+
+### See the cost on hardware (5 minutes)
+
+```c
+static uint32_t v_word __attribute__((section(".iram0.text"), aligned(4)));
+static uint16_t v_half __attribute__((section(".iram0.text"), aligned(4)));
+
+void bench_iram_width(void)
+{
+    volatile int i;
+    uint32_t t0 = system_get_time();
+    for (i = 0; i < 100000; i++) v_word++;      /* legal 32-bit access   */
+    uint32_t word_us = system_get_time() - t0;
+
+    t0 = system_get_time();
+    for (i = 0; i < 100000; i++) v_half++;      /* emulated by the handler */
+    uint32_t half_us = system_get_time() - t0;
+
+    os_printf("IRAM word++: %u us | IRAM half++: %u us | ratio x%.1f\n",
+              word_us, half_us, (double)half_us / (double)(word_us ? word_us : 1));
+}
+```
+
+Expect the half-word loop to be several times slower — each iteration traps
+twice (one `l16ui` load, one `s16i` store). That is the price an unsuspecting
+8/16-bit IRAM field pays on every single access.
+
 ## 🧠 Allocation Strategy
 
 ```
 malloc_caps(size, caps)
+ │
+ ├─ MXR_CAP_PREFER_IRAM set ?
+ │   └─ strip the bit, remember the preference (it never causes a failure)
  │
  ├─ caps & EXEC ?
  │   └─ IRAM only (hard-bound EXEC zone)
@@ -121,6 +273,8 @@ malloc_caps(size, caps)
  │       ├─ size > zone ? → REJECT (exec_zone_rejects++)
  │       └─ no gap      ? → REJECT (alloc_fail_no_memory++)
  │       └─ found → insert desc (EXEC flag) → return (IRAM)
+ │
+ ├─ [MXR_CAP_PREFER_IRAM] → IRAM fallback attempt (before DRAM)
  │
  ├─ [CONFIG_MXR_IRAM_FB_ORDER_IRAM_FIRST]
  │   └─ IRAM fallback attempt (BEFORE DRAM — original MxR order)
@@ -166,6 +320,27 @@ trailing gap is absorbed).
 The free-gap search stops as soon as a gap with
 `waste <= size >> MXR_BEST_FIT_WASTE_SHIFT` is found. Disabling it forces a
 strict best-fit full scan (only an exact-fit gap stops early).
+
+## ⚡ Optimization & debug features (the `Optimization` menu)
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `MXR_QUICK_FIT_HINT_ENABLE` | **y** | Per-region O(1) hint: caches the largest known gap, so a repeated size query skips the search. Hint fields are always 32-bit. |
+| `MXR_BINNING` | n | Segregated per-bin LRU gap lists inside each region (larger gaps first, near-fit bins first). Requires the quick-fit hint. Adds 24 B per region. |
+| `MXR_BIN_COUNT` | 4 | Number of bins per region (2–8). |
+| `MXR_BIG_GAP_GUARD` | n | Prevents premature carving of large gaps (a “baton” policy): a big gap is only split when the request is big enough. |
+| `MXR_BIG_GAP_MIN` | 1024 | Only gaps ≥ this size are guarded. |
+| `MXR_BIG_GAP_FACTOR_SHIFT` | 2 | Guard ratio: block must be ≥ `gap >> shift`. |
+| `MXR_DESC_DYNAMIC` | n | Descriptor table carved from the DRAM heap tail, grows/shrinks in chunks (needs tables in DRAM). |
+| `MXR_DESC_INIT` / `MXR_DESC_CHUNK` | 32 / 16 | Initial table size and growth chunk (in descriptors). |
+| `MXR_IRAM_DESC_DYNAMIC` | n | Same idea for the IRAM fallback heap (requires the fallback zone). |
+| `MXR_CANARY` | n | 4-byte head + 4-byte tail canary per block (**+8 B per block**). Corrupt detection quarantines the block on `free`/`realloc`. Debug only — see Known Limitations. |
+| `MXR_DOUBLE_FREE_DETECT` | n | Ring of recent frees; a repeated pointer is reported instead of corrupting the heap. |
+| `MXR_DFD_RING_SIZE` | 16 | Ring size (4–256). |
+
+All of these report through `mxr_status_t` counters (`quick_fit_hint_hits/misses`,
+`canary_violations`, `double_free_detects`, `bgg_relaxed_accepts`,
+`desc_growth_events` / `desc_shrink_events`) and through `mxr_dump()`.
 
 ## 🔀 Cross-region fallback
 
@@ -214,6 +389,9 @@ idf.py menuconfig
       → IRAM fallback order:    DRAM first (recommended)
       → Enable IRAM heap: [*]
       → IRAM_RESERVE_BYTES: 2048
+      → Descriptor table placement:  DRAM (.bss)         ← or IRAM (.iram0.text)
+      → Allocator state placement:   IRAM — variant B    ← only when tables are in IRAM
+                                      (or DRAM — variant A)
 ```
 
 **3. Build & flash**
@@ -250,6 +428,9 @@ CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-8%,32-10%,64-10%,128-12%,256-10%,512-2
 - boundaries must be strictly increasing; percent sum ≤ 100; an empty IRAM-fb
   string yields a single flat fallback region. Validated at CMake configure
   time (IRAM-fb string is validated only when `MXR_IRAM_FALLBACK_ENABLED=y`).
+- With `MXR_COMPACT_TYPES=y` boundaries must stay ≤ 65535 (CMake checks this),
+  because `max_bytes` is packed into `uint16_t`. In variant B the placed
+  structs use 32-bit fields, so this check is intentionally conservative.
 
 ### Key options
 
@@ -257,7 +438,7 @@ CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-8%,32-10%,64-10%,128-12%,256-10%,512-2
 | --- | --- | --- |
 | `MXR_MAX_DESC` | 256 | Max DRAM descriptors |
 | `MXR_IRAM_MAX_DESC` | 128 | Max IRAM descriptors |
-| `MXR_COMPACT_TYPES` | y | `uint16_t` for caps/min/max/count |
+| `MXR_COMPACT_TYPES` | y | `uint16_t` for caps/min/max/count (ignored for state structs in variant B) |
 | `MXR_USE_IRAM` | y | Enable IRAM heap |
 | `MXR_IRAM_RESERVE_BYTES` | 2048 | Hard-bound EXEC zone `[0, reserve)`; `0` disables EXEC |
 | `MXR_IRAM_FALLBACK_ENABLED` | y | Enable non-EXEC 32-bit/INTERNAL fallback into IRAM |
@@ -276,16 +457,25 @@ CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-8%,32-10%,64-10%,128-12%,256-10%,512-2
 | `MXR_IRAM_PATH_CORE` | y | IRAM hot path = malloc/free only |
 | `MXR_IRAM_PATH_ALLOC_FAMILY` | n | IRAM hot path = +calloc/zalloc/realloc |
 
-### Descriptor table placement
+### Placement: descriptor tables and allocator state
 
-| Option | Description |
+| Option | Effect |
 | --- | --- |
-| `MXR_DESC_IN_DRAM` | DRAM `.bss` — default, safest |
-| `MXR_DESC_IN_IRAM_TEXT` | IRAM `.iram0.text` — no linker patch needed |
-| `MXR_DESC_IN_IRAM_BSS` | IRAM `.iram0.bss` — requires patched linker script |
+| `MXR_DESC_IN_DRAM` | Descriptor tables in `.bss` — default, safest |
+| `MXR_DESC_IN_IRAM_TEXT` | Tables in `.iram0.text` — no linker patch needed |
+| `MXR_DESC_IN_IRAM_BSS` | Tables in `.iram0.bss` — requires a patched linker script (`ld/esp8266.project.ld.in` is the template) |
+| `MXR_STATE_IN_IRAM` | Variant B: `s_stats` / `s_region[]` / `s_iram_fb_region[]` stay in IRAM with **all-32-bit fields** |
+| `MXR_STATE_IN_DRAM` | Variant A: those objects have no IRAM attribute → `.bss`, natural field widths |
 
-> Only the descriptor arrays can move to IRAM. Scalar state stays in DRAM
-> because ESP8266 IRAM does not support byte/half-word accesses safely.
+The state placement choice exists **only** when the tables are in IRAM, and
+`MXR_STATE_IN_IRAM` without IRAM tables is a compile-time `#error`. See
+[IRAM safety](#-iram-safety) for the byte counts and the reasoning.
+
+> Static (non-arena) footprint with default options: tables
+> `MXR_MAX_DESC × 8` (+ `MXR_IRAM_MAX_DESC × 8`), state
+> `232 + 44 × (N + M)` B in variant A or `256 + 48 × (N + M)` B in variant B,
+> where `N`/`M` are DRAM/fallback region counts. Enable
+> `MXR_DESC_DYNAMIC` to move the DRAM table into the heap tail instead.
 
 ## 🔌 Integration Modes
 
@@ -352,11 +542,21 @@ MALLOC_CAP_8BIT      (1 << 2)   // 8-bit access (DRAM only)
 MALLOC_CAP_DMA       (1 << 3)   // DMA-capable (DRAM only)
 MALLOC_CAP_SPIRAM    (1 << 10)  // compatibility
 MALLOC_CAP_INTERNAL  (1 << 11)  // internal memory (DRAM or IRAM fb)
+MXR_CAP_PREFER_IRAM  (1u << 20) // MxR-only SOFT placement hint: try IRAM fb first
 ```
 
 > **IRAM fallback admission:** a request enters the IRAM fallback path when
 > it has `32BIT` **or** `INTERNAL` **or** `caps == 0`, and does **not** have
 > `8BIT`, `DMA`, `SPIRAM`, or `EXEC`.
+
+> **`MXR_CAP_PREFER_IRAM`** is a preference, not a requirement: the bit is
+> stripped before region matching, so it can never make an allocation fail —
+> if IRAM cannot serve it, the request falls through to DRAM as usual
+> (`prefer_iram_hits` / `prefer_iram_misses` count both outcomes). It is
+> ignored when the IRAM heap or the fallback zone is disabled, and it is
+> **not** understood by the stock SDK heap (there it makes the request
+> unsatisfiable) — set it only in builds where MxR-Malloc is linked, and only
+> for buffers that are accessed exclusively with 32-bit loads/stores.
 
 ## 📊 Diagnostics
 
@@ -374,7 +574,7 @@ MALLOC_CAP_INTERNAL  (1 << 11)  // internal memory (DRAM or IRAM fb)
 I mxr_malloc: MxR dump: initialized=1
 I mxr_malloc: total=86304 free=71200 min_free=68400 largest=65536
 I mxr_malloc: desc dram=42/256 iram=3/128 max_active=45
-I mxr_malloc: exec=3 iram_fb=2 cross=0 cross_skip=0 guard_rej=0 caps_skip=0 free_skip=0 cache_skip=0
+I mxr_malloc: exec=3 iram_fb=2 prefer_iram=1/0 cross=0 cross_skip=0 guard_rej=0 caps_skip=0 free_skip=0 cache_skip=0
 I mxr_malloc: insert_fail: bounds=0 overlap=0 dup=0 table_full=0
 I mxr_malloc: region_init=ok iram_fb_init=ok
 I mxr_malloc: DRAM frag: pct=12% gaps=6 slivers=2(33%) bf_early=31 anti_sliver=2
@@ -396,6 +596,7 @@ I mxr_malloc: stats: fail_mem=0 fail_table=0 invalid_free=0
 | `exec_allocs` | EXEC allocations served from the EXEC zone |
 | `exec_zone_rejects` | EXEC requests rejected (zone empty / block too large) |
 | `iram_fallback_allocs` | Non-EXEC 32-bit allocations placed in IRAM |
+| `prefer_iram_hits` / `prefer_iram_misses` | `MXR_CAP_PREFER_IRAM` requests served by IRAM / bounced to DRAM |
 | `cross_region_allocs` | Cross-region placements |
 | `cross_region_guard_rejects` | Cross-region attempts rejected by GUARD / min_bytes guard |
 | `cross_region_skip_fragmented` | Cross-region scans that found no gap |
@@ -403,6 +604,11 @@ I mxr_malloc: stats: fail_mem=0 fail_table=0 invalid_free=0
 | `gap_count` / `sliver_count` | Free gaps / gaps below `MXR_MIN_SLICE_BYTES` |
 | `best_fit_early_exits` | Best-fit searches that stopped early |
 | `anti_sliver_expansions` | Blocks expanded to absorb a sliver |
+| `quick_fit_hint_hits` / `_misses` | O(1) hint served the query / had to fall back to a search |
+| `bgg_relaxed_accepts` | Big-gap guard relaxed a too-small split |
+| `canary_violations` | Blocks whose canary was found damaged (debug builds) |
+| `double_free_detects` | Repeated frees caught by the DFD ring |
+| `desc_growth_events` / `desc_shrink_events` | Dynamic descriptor table resizes |
 | `iram_exec_zone_total/free/min_free` | EXEC zone capacity / free / low-water mark |
 
 ## ⚠️ Known Limitations
@@ -410,8 +616,26 @@ I mxr_malloc: stats: fail_mem=0 fail_table=0 invalid_free=0
 - **ESP8266 only** — arena limited to ~128 KB by the 31-bit offset field.
 - **No heap tracing** — `CONFIG_HEAP_TRACING` is incompatible with wrap mode.
   CMake will emit a warning if both are enabled.
-- **IRAM byte access** — descriptor tables in IRAM require 32-bit-aligned
-  access only (scalar state stays in DRAM).
+- **IRAM access width** — the hardware allows 32-bit accesses only. MxR-Malloc
+  keeps the rule by construction (state is either in DRAM, or all-32-bit in
+  IRAM), but any *new* object you add with `MXR_IRAM_DATA_ATTR` must be
+  word-only. Run `tools/check_iram_widths.py` in CI; in variant B the
+  `_Static_assert` barrier also fails the build. Note that 8/16-bit accesses
+  that do slip through will not crash — the SDK handler emulates them at the
+  cost of a full exception each.
+- **Variant B ignores `COMPACT_TYPES` for `mxr_region_t` / `mxr_status_t`** —
+  that is where its extra ~50–70 B of IRAM goes. Variant A keeps the compact
+  widths but pays in DRAM.
+- **The `≤ 65535` boundary check is conservative** — with `MXR_COMPACT_TYPES=y`
+  CMake rejects region boundaries above 65535 even when variant B would allow
+  them.
+- **`MXR_CANARY` costs 8 bytes per block** and inflates the cluster size of
+  every size class; with an aggressive small-class layout (e.g. only 8% of the
+  arena below 128 B) the small region can be starved and allocations start
+  failing. Use it for debugging, not in production firmware, and re-check your
+  region percentages when you enable it.
+- **`MXR_DOUBLE_FREE_DETECT` is heuristic** — the ring catches recent repeats;
+  a pointer freed long ago and re-freed later may still slip past.
 - **No in-place `realloc` across regions** — the block is moved if it does not
   fit.
 - **EXEC is DRAM-invisible** — `MALLOC_CAP_EXEC` never falls back to DRAM and
@@ -420,25 +644,42 @@ I mxr_malloc: stats: fail_mem=0 fail_table=0 invalid_free=0
   consumes significant IRAM. Check `idf.py size` before enabling.
 - **IRAM fb order** — with the default `DRAM_FIRST`, pure-32-bit/INTERNAL
   allocations reach IRAM only after DRAM is exhausted. Use `IRAM_FIRST`
-  (original behavior) if you want IRAM preferred.
+  (original behavior) or the per-call `MXR_CAP_PREFER_IRAM` hint if you want
+  IRAM preferred.
 - **IRAM fb region_for_size** — no implicit fallback to first/last region;
   a misconfigured layout that leaves a size hole will return `NULL` for
   that size class instead of silently using a wrong region.
+- **`MXR_DESC_DYNAMIC` requires tables in DRAM** — it carves the table from
+  the heap tail, so it is unavailable with `MXR_DESC_IN_IRAM_*`.
 
 ## 📁 Project Structure
 
 ```
-mxr-malloc/
-├── CMakeLists.txt          # Build system, region validation, linker wraps
-├── Kconfig.projbuild       # All configuration options
-├── mxr_malloc.c            # Core allocator
-├── mxr_malloc.h            # Public API and data structures
-├── mxr_heap_wrap.c         # Linker --wrap integration layer
-├── mxr_heap_compat.c       # Direct heap_caps_* replacement
-└── mxr_heap_port.c         # Standard libc replacement
+MXR-MALLOC/
+├── README.md
+├── LICENSE
+├── index.html                    # interactive simulator (same Kconfig model)
+├── logo-full.svg
+├── logo-full-light.svg
+└── mxr_malloc/
+    ├── CMakeLists.txt            # Build system, region validation, linker wraps
+    ├── Kconfig.projbuild         # All configuration options
+    ├── include/
+    │   └── mxr_malloc.h          # Public API, status/region types, IRAM barriers
+    ├── ld/
+    │   └── esp8266.project.ld.in # Linker-script template (.iram0.bss support)
+    ├── mxr_malloc.c              # Core allocator
+    ├── mxr_heap_wrap.c           # Linker --wrap integration layer
+    ├── mxr_heap_compat.c         # Direct heap_caps_* replacement
+    └── mxr_heap_port.c           # Standard libc replacement
 ```
 
+`tools/check_iram_widths.py` is the optional IRAM-width audit used in CI (see
+[IRAM safety](#-iram-safety)).
+
 ## 🧪 Testing
+
+### On target
 
 ```c
 #include "mxr_malloc.h"
@@ -459,8 +700,32 @@ void app_main(void)
     // EXEC allocation — hard-bound to [0, reserve)
     void *exec = mxr_malloc_caps(256, MALLOC_CAP_EXEC);
 
+    // Soft placement hint — IRAM first, DRAM as fallback
+    void *audio = mxr_malloc_caps(1024, MALLOC_CAP_32BIT | MXR_CAP_PREFER_IRAM);
+
     mxr_dump();
 }
+```
+
+### In the browser
+
+`index.html` is a full interactive simulator of the allocator (region geometry,
+cross-region guards, quick-fit hint, binning, canary, DFD, dynamic descriptor
+tables, and the placement choices above). Open it in a browser, or serve it:
+
+```bash
+python3 -m http.server 8000   # then http://localhost:8000/index.html
+```
+
+Its settings panel mirrors `Kconfig.projbuild`, including
+**Descriptor table placement** and **Allocator state placement** (A/B), and can
+subtract the static state/tables from the arena budgets so the simulated arena
+matches a real build.
+
+### Static audit
+
+```bash
+python3 tools/check_iram_widths.py mxr_malloc/
 ```
 
 ## 📜 License
