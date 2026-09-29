@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 #  1. Select source files based on integration mode
 # ============================================================
 set(MXR_SRCS "mxr_malloc.c")
@@ -14,6 +14,7 @@ endif()
 idf_component_register(
     SRCS ${MXR_SRCS}
     INCLUDE_DIRS "include"
+    LDFRAGMENTS "ld/mxr_sections.lf"
     REQUIRES
         log
         newlib
@@ -130,12 +131,12 @@ if(_MXR_CFG)
     message(STATUS
         "MxR-malloc: ${_MXR_DRAM_COUNT} DRAM region(s) from "
         "'${CONFIG_MXR_REGION_CONFIG}'")
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC
         "MXR_PARSED_REGION_COUNT=${_MXR_DRAM_COUNT}")
 else()
     message(STATUS
         "MxR-malloc: DRAM region config empty, using single flat region")
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC
         "MXR_PARSED_REGION_COUNT=1")
 endif()
 
@@ -239,13 +240,13 @@ if(CONFIG_MXR_USE_IRAM AND CONFIG_MXR_IRAM_FALLBACK_ENABLED)
         message(STATUS
             "MxR-malloc: ${_MXR_IRAM_COUNT} IRAM fallback region(s) from "
             "'${CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG}'")
-        target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC
             "MXR_IRAM_FB_PARSED_REGION_COUNT=${_MXR_IRAM_COUNT}")
     else()
         message(STATUS
             "MxR-malloc: IRAM fallback region config empty, using single "
             "flat region")
-        target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC
             "MXR_IRAM_FB_PARSED_REGION_COUNT=1")
     endif()
 endif()
@@ -302,4 +303,7 @@ if(CONFIG_MXR_INTEGRATION_PORT)
         "directly. Ensure original newlib/libc implementations are excluded "
         "from the build, otherwise duplicate symbol errors will occur."
     )
+endif()
+if(CONFIG_MXR_INTEGRATION_COMPAT)
+    message(WARNING "MxR-malloc: COMPAT defines heap_caps_* directly. Exclude the stock heap implementation to avoid duplicate symbols; WRAP is the recommended integration.")
 endif()

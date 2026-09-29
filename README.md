@@ -1,3 +1,7 @@
+> **2026-09-29 audit fixes:** see [docs/CHANGES-RU.md](docs/CHANGES-RU.md)
+> and [docs/VALIDATION.md](docs/VALIDATION.md) for changes, reproducible tests,
+> target-build results and the remaining on-device validation requirements.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="logo-full.svg"/>
@@ -463,7 +467,7 @@ CONFIG_MXR_IRAM_FALLBACK_REGION_CONFIG="4-8%,32-10%,64-10%,128-12%,256-10%,512-2
 | --- | --- |
 | `MXR_DESC_IN_DRAM` | Descriptor tables in `.bss` — default, safest |
 | `MXR_DESC_IN_IRAM_TEXT` | Tables in `.iram0.text` — no linker patch needed |
-| `MXR_DESC_IN_IRAM_BSS` | Tables in `.iram0.bss` — requires a patched linker script (`ld/esp8266.project.ld.in` is the template) |
+| `MXR_DESC_IN_IRAM_BSS` | Tables in SDK `.iram0.bss` — automatically mapped by `ld/mxr_sections.lf` in the component CMake build |
 | `MXR_STATE_IN_IRAM` | Variant B: `s_stats` / `s_region[]` / `s_iram_fb_region[]` stay in IRAM with **all-32-bit fields** |
 | `MXR_STATE_IN_DRAM` | Variant A: those objects have no IRAM attribute → `.bss`, natural field widths |
 
@@ -480,7 +484,7 @@ The state placement choice exists **only** when the tables are in IRAM, and
 ## 🔌 Integration Modes
 
 **Wrap mode (default, recommended)** — original `heap` component stays in the
-build; linker `--wrap` redirects calls. Pros: zero risk, easy to disable.
+build; linker `--wrap` redirects calls. Pros: no SDK source patch, easy to disable. Validate wrapping/linkage in the final ELF.
 
 ```
 heap_caps_malloc()  →  __wrap__heap_caps_malloc()  →  mxr_malloc_caps()
