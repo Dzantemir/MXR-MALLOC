@@ -671,7 +671,7 @@ MXR-MALLOC/
     ├── include/
     │   └── mxr_malloc.h          # Public API, status/region types, IRAM barriers
     ├── ld/
-    │   └── esp8266.project.ld.in # Linker-script template (.iram0.bss support)
+    │   └── mxr_sections.lf       # Linker-script template (.iram0.bss support)
     ├── mxr_malloc.c              # Core allocator
     ├── mxr_heap_wrap.c           # Linker --wrap integration layer
     ├── mxr_heap_compat.c         # Direct heap_caps_* replacement
