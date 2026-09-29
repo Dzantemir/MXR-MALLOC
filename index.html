@@ -3,7 +3,8 @@
 
 <head>
   <meta charset="utf-8">
-  <title>MxR-malloc v2 — ESP8266 heap allocator simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MxR-malloc v3 — ESP8266 heap allocator simulator</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -518,8 +519,8 @@
 
 <body>
   <header>
-    <h1>MxR-malloc — simulator <span style="color:var(--acc);font-size:13px">v2</span></h1>
-    <div class="sub">ESP8266 RTOS SDK · logic 1:1 with mxr_malloc.c v2 (hint · bins · big-gap-guard · canary · double-free detect · dynamic desc tables) · DRAM + IRAM · EXEC hard-bound to reserve zone ·
+    <h1>MxR-malloc — simulator <span style="color:var(--acc);font-size:13px">v3 · audit sync</span></h1>
+    <div class="sub">ESP8266 RTOS SDK · behavioral model aligned with the 2026-09-29 audit fixes (not a CPU or concurrency emulator) · DRAM + IRAM · EXEC hard-bound to reserve zone ·
       cross-region with independent DRAM/IRAM guards</div>
     <button class="reset" onclick="resetSim()">⟲ Reset simulation</button>
   </header>
@@ -532,6 +533,9 @@
 
       <fieldset>
         <legend>Arenas</legend>
+        <div class="row"><label><input type="checkbox" id="cfgDefaultDramOnly"> CONFIG_MXR_DEFAULT_DRAM_ONLY</label></div>
+        <p class="hint">Off: ordinary malloc uses SDK-compatible 32BIT. On: ordinary malloc uses 8BIT|32BIT (DRAM only).
+          Explicit heap_caps operations and heap queries keep their requested capabilities.</p>
         <div class="row"><label>DRAM arena, bytes</label><input type="number" id="cfgDramSize" value="32768" min="1024"
             step="1024"></div>
         <div class="row"><label><input type="checkbox" id="cfgUseIram" checked> CONFIG_MXR_USE_IRAM</label></div>
@@ -540,7 +544,7 @@
               step="1024"></div>
           <div class="row"><label>IRAM_RESERVE_BYTES</label><input type="number" id="cfgReserve" value="2048" min="0"
               step="256"></div>
-          <div class="row"><label>IRAM_FALLBACK_MAX (0=unltd)</label><input type="number" id="cfgFbMax" value="0"
+          <div class="row"><label>IRAM_FALLBACK_MAX_BYTES (0=unlimited)</label><input type="number" id="cfgFbMax" value="0"
               min="0"></div>
           <div class="row"><label>IRAM fallback order</label>
             <select id="cfgIramOrder">
@@ -552,7 +556,7 @@
               CONFIG_MXR_IRAM_FALLBACK_ENABLED</label></div>
           <div class="row"><label><input type="checkbox" id="cfgExecWhole" checked> MXR_IRAM_EXEC_WHOLE_IF_NO_FB (when
               fb off)</label></div>
-          <p class="hint">EXEC zone = [0, reserve). EXEC blocks never leave it. reserve = 0 → EXEC allocations are
+          <p class="hint">The fallback limit applies to the final descriptor size, including alignment, canaries and anti-sliver expansion.<br>EXEC zone = [0, reserve). EXEC blocks never leave it. reserve = 0 → EXEC allocations are
             rejected entirely.</p>
         </div>
       </fieldset>
@@ -565,6 +569,7 @@
             value="128" min="1" max="4096"></div>
         <div class="row"><label><input type="checkbox" id="cfgDescDyn"> MXR_DESC_DYNAMIC (DRAM table in heap
             tail)</label></div>
+        <p class="hint">Dynamic INIT and CHUNK are shared settings. Each arena clamps INIT to its own MAX_DESC. Growth requires a complete CHUNK and a free tail.</p>
         <div id="descDynGroup">
           <div class="row"><label>DESC_INIT</label><input type="number" id="cfgDescInit" value="32" min="4"
               max="1024"></div>
@@ -581,7 +586,7 @@
           <select id="cfgDescPlace">
             <option value="dram" selected>DRAM (.bss) — default</option>
             <option value="iram_text">IRAM (.iram0.text)</option>
-            <option value="iram_bss">IRAM (.iram0.bss)</option>
+            <option value="iram_bss">IRAM (.iram0.bss, SDK mapping)</option>
           </select>
         </div>
         <div id="statePlaceGroup">
@@ -592,23 +597,24 @@
             </select>
           </div>
         </div>
-        <div class="row"><label><input type="checkbox" id="cfgCountStatic"> вычитать статику из арен (как в железе)</label></div>
+        <div class="row"><label><input type="checkbox" id="cfgCountStatic"> subtract modeled static data from arena budgets</label></div>
         <p class="hint">
-          Зеркало Kconfig: <b>Descriptor table placement</b> (MXR_DESC_IN_IRAM_TEXT / _BSS) и
-          <b>Allocator state placement</b> (MXR_STATE_IN_IRAM = вариант B / MXR_STATE_IN_DRAM = вариант A).
-          Пункт про состояние виден только при таблицах в IRAM — как в Kconfig, где состояние в IRAM
-          невозможно без IRAM-размещения (в C это <code>#error</code>).<br>
-          Байты статики (вне арен): таблицы <code>MXR_MAX_DESC×8</code> (+ <code>MXR_IRAM_MAX_DESC×8</code>),
-          состояние <code>224 + 68×N</code> B (A) или <code>248 + 72×N</code> B (B), где N — число регионов
-          (DRAM + fallback). В IRAM допустимы только 32-битные обращения, иначе каждое уходит
-          в LoadStoreErrorHandler — поэтому вариант B расширяет поля до 32 бит, а COMPACT_TYPES к
-          <code>mxr_status_t</code>/<code>mxr_region_t</code> перестаёт применяться.
-          Тумблер «вычитать статику» по умолчанию выключен, чтобы числа совпадали с прежними прогонами.
+          Mirrors Kconfig: <b>Descriptor table placement</b> (MXR_DESC_IN_IRAM_TEXT / _BSS) and
+          <b>Allocator state placement</b> (MXR_STATE_IN_IRAM = variant B / MXR_STATE_IN_DRAM = variant A).
+          The state placement selector is available only with IRAM descriptor placement; IRAM state
+          requires that placement (otherwise the C header emits <code>#error</code>).<br>
+          Static data outside the arenas: descriptor tables <code>MXR_MAX_DESC×8</code> (+ <code>MXR_IRAM_MAX_DESC×8</code>),
+          excluding dynamic tables. Modeled state size depends on field widths, hint/bin settings, and the number of regions
+          (DRAM + fallback). IRAM data must use aligned 32-bit accesses. Supported byte/halfword accesses enter
+          LoadStoreErrorHandler for emulation; variant B widens fields to 32 bits and COMPACT_TYPES no longer applies to
+          <code>mxr_status_t</code>/<code>mxr_region_t</code>.
+          CMake maps <code>.bss.mxriram</code> through <code>ld/mxr_sections.lf</code> into SDK <code>.iram0.bss</code>; no SDK script patch is needed.<br>Static subtraction is off by default. The model excludes other globals, code, linker padding and SDK overhead; use the ELF map for the real budget.
         </p>
       </fieldset>
 
       <fieldset>
         <legend>Optimization (menuconfig)</legend>
+        <div class="row"><label><input type="checkbox" id="cfgCompact" checked> MXR_COMPACT_TYPES (DRAM state)</label></div>
         <div class="row"><label><input type="checkbox" id="cfgHintOn" checked> MXR_QUICK_FIT_HINT_ENABLE (v1 O(1) fast
             path)</label></div>
         <div class="row" id="rowBins"><label><input type="checkbox" id="cfgBins"> MXR_BINNING (segregated LRU
@@ -620,7 +626,7 @@
         <div class="row"><label><input type="checkbox" id="cfgBgg"> MXR_BIG_GAP_GUARD («baton» policy)</label></div>
         <div id="bggGroup">
           <div class="row"><label>BIG_GAP_MIN</label><input type="number" id="cfgBggMin" value="1024" min="0"
-              max="1048576"></div>
+              max="2147483647"></div>
           <div class="row"><label>FACTOR_SHIFT</label><input type="number" id="cfgBggShift" value="2" min="0" max="6">
           </div>
         </div>
@@ -710,6 +716,10 @@
     <main>
       <section class="panel">
         <h3>Operations</h3>
+        <p class="hint">Trace messages explain simulated events, not firmware logging. C canary/DFD errors only update counters inside the allocator;
+          mxr_dump reports them later with cache enabled. Realloc copies live payloads outside its lock and re-finds the old descriptor on release.
+          This single-threaded model does not measure interrupt latency, prove cache-off safety, or emulate task interleavings.
+          Status is detailed; firmware MINIMAL dump skips region snapshots.</p>
         <div class="row">
           <label>size</label><input type="number" id="opSize" value="100" min="0" style="width:100px">
           <label><input type="checkbox" id="capExec"> EXEC</label>
@@ -721,8 +731,11 @@
         </div>
         <div class="row">
           <button class="primary" onclick="uiMalloc()">heap_caps_malloc</button>
-          <button onclick="uiCalloc()">calloc</button>
-          <button onclick="uiZalloc()">zalloc</button>
+          <button onclick="uiCalloc()">heap_caps_calloc</button>
+          <button onclick="uiZalloc()">heap_caps_zalloc</button>
+          <button onclick="uiDefaultMalloc()">malloc (default policy)</button>
+          <button onclick="uiDefaultCalloc()">calloc (default policy)</button>
+          <button onclick="uiDefaultZalloc()">zalloc (default policy)</button>
           <span style="color:var(--dim)">|</span>
           <label>free(ptr)</label><input type="text" id="freePtr" placeholder="0x..." style="width:110px">
           <button class="danger" onclick="uiFreeInput()">free</button>
@@ -736,7 +749,7 @@
           <button onclick="scenarioPWM()">pwm.c</button>
           <button onclick="scenarioSPI()">spi.c (32BIT buf)</button>
           <button onclick="scenarioFrag()">Fragmentation demo</button>
-          <button onclick="scenarioV2()">v2 safety demo</button>
+          <button onclick="scenarioV2()">Safety demo</button>
         </div>
         <div class="row">
           <span style="color:var(--dim)">Stress test:</span>
@@ -869,6 +882,7 @@
       </div>
       <div class="row" style="margin-top:10px">
         <button class="primary" onclick="modalApply()">realloc_caps</button>
+        <button onclick="modalApplyDefault()">realloc (default policy)</button>
         <button onclick="modalClose()">cancel</button>
       </div>
     </div>
@@ -887,7 +901,7 @@
     const PALETTE = ['#4ea1ff', '#59d98e', '#f2cc60', '#ff8f6b', '#c792ea', '#63e6e2', '#ff7ab8', '#a3b18a', '#e0e05e', '#7fd1ff'];
     const IRAM_PALETTE = ['#b48cff', '#8f7bff', '#d68cff', '#7b9bff', '#a06bff', '#c39bff', '#8a6bff', '#d0a5ff', '#9d8cff', '#b07bff'];
 
-    function align4(x) { return (x + ALIGN - 1) & ~(ALIGN - 1); }
+    function align4(x) { return Math.ceil(x / ALIGN) * ALIGN; }
     function hex(x) { return '0x' + (x >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
     function capsStr(c) {
       const p = []; if (c & CAP_EXEC) p.push('EXEC'); if (c & CAP_32BIT) p.push('32BIT');
@@ -934,9 +948,11 @@
         iramSize: +document.getElementById('cfgIramSize').value,
         useIram: document.getElementById('cfgUseIram').checked,
         reserve: Math.max(0, align4(+document.getElementById('cfgReserve').value || 0)),
+        defaultDramOnly: document.getElementById('cfgDefaultDramOnly').checked,
+        compact: document.getElementById('cfgCompact').checked,
         fbMax: Math.max(0, +document.getElementById('cfgFbMax').value || 0),
-        maxDesc: Math.max(1, +document.getElementById('cfgMaxDesc').value || 1),
-        iramMaxDesc: Math.max(1, +document.getElementById('cfgIramMaxDesc').value || 1),
+        maxDesc: Math.min(4096, Math.max(1, Math.trunc(+document.getElementById('cfgMaxDesc').value || 1))),
+        iramMaxDesc: Math.min(4096, Math.max(1, Math.trunc(+document.getElementById('cfgIramMaxDesc').value || 1))),
         dramRegions: document.getElementById('cfgDramRegions').value.trim(),
         iramRegions: document.getElementById('cfgIramRegions').value.trim(),
         antiSliver: document.getElementById('cfgAntiSliver').checked,
@@ -958,49 +974,50 @@
         bins: document.getElementById('cfgHintOn').checked && document.getElementById('cfgBins').checked,
         binCount: Math.min(8, Math.max(2, +document.getElementById('cfgBinCount').value || 4)),
         bgg: document.getElementById('cfgBgg').checked,
-        bggMin: Math.max(0, align4(+document.getElementById('cfgBggMin').value || 0)),
+        bggMin: Math.min(MAX_LEN, Math.max(0, Math.trunc(+document.getElementById('cfgBggMin').value || 0))),
         bggShift: Math.min(6, Math.max(0, +document.getElementById('cfgBggShift').value | 0)),
         canary: document.getElementById('cfgCanary').checked,
         dfd: document.getElementById('cfgDfd').checked,
         dfdRing: Math.min(256, Math.max(4, +document.getElementById('cfgDfdRing').value || 16)),
         descDyn: document.getElementById('cfgDescDyn').checked,
-        descInit: Math.max(4, +document.getElementById('cfgDescInit').value || 32),
-        descChunk: Math.max(4, +document.getElementById('cfgDescChunk').value || 16),
+        descInit: Math.min(1024, Math.max(4, Math.trunc(+document.getElementById('cfgDescInit').value || 32))),
+        descChunk: Math.min(256, Math.max(4, Math.trunc(+document.getElementById('cfgDescChunk').value || 16))),
         iramDescDyn: document.getElementById('cfgIramDescDyn').checked,
         /* ---- placement (Kconfig: Descriptor table placement / Allocator state placement) ---- */
         descPlace: document.getElementById('cfgDescPlace').value,     // dram | iram_text | iram_bss
-        statePlace: document.getElementById('cfgStatePlace').value,   // iram = вариант B | dram = вариант A
+        statePlace: document.getElementById('cfgStatePlace').value,   // iram = variant B | dram = variant A
         countStatic: document.getElementById('cfgCountStatic').checked,
       };
       cfg.canaryHead = cfg.canary ? 4 : 0;
       cfg.canaryOv = cfg.canary ? 8 : 0;
 
-      /* Состояние в IRAM возможно только при IRAM-размещении таблиц (как #error в mxr_malloc.h). */
+      /* IRAM state requires IRAM descriptor placement (enforced by mxr_malloc.h). */
       cfg.descInIram = cfg.descPlace !== 'dram';
       cfg.stateInIram = cfg.descInIram && cfg.statePlace === 'iram';
+      cfg.descDyn = cfg.descDyn && !cfg.descInIram;
+      cfg.iramDescDyn = cfg.iramDescDyn && cfg.useIram && cfg.iramFbEnabled;
 
-      /* Байты статических объектов (вне арен). Числа измерены по сборке:
-       * s_stats = 224 B (A) / 248 B (B); mxr_region_t = 68 B (A) / 72 B (B)
-       * на регион — одинаково для DRAM-регионов и IRAM-fallback регионов. */
+      /* Current 32-bit ABI: status=184 (DRAM) or 204 (IRAM).
+       * Region base=36 compact DRAM, otherwise 40; hints add 8 bytes per slot.
+       * This subtotal intentionally excludes other globals and linker padding. */
       const nDramReg = regionCountOf(cfg.dramRegions, 'dram');
       const nFbReg = (cfg.useIram && cfg.iramFbEnabled) ? regionCountOf(cfg.iramRegions, 'iram') : 0;
-      const inclFb = cfg.useIram && cfg.iramFbEnabled;
-      cfg.stateBytes = cfg.stateInIram
-        ? 248 + 72 * nDramReg + (inclFb ? 72 * nFbReg : 0)
-        : 224 + 68 * nDramReg + (inclFb ? 68 * nFbReg : 0);
-      cfg.stateBytesA = 224 + 68 * nDramReg + (inclFb ? 68 * nFbReg : 0);   // для справки: сколько было бы в A
+      const hintBytes = cfg.hintOn ? 8 * (cfg.bins ? cfg.binCount : 1) : 0;
+      cfg.regionStateBytes = (cfg.stateInIram || !cfg.compact ? 40 : 36) + hintBytes;
+      cfg.stateBytes = (cfg.stateInIram ? 204 : 184) + cfg.regionStateBytes * (nDramReg + nFbReg);
+      cfg.stateBytesA = 184 + ((cfg.compact ? 36 : 40) + hintBytes) * (nDramReg + nFbReg);
       cfg.nDramReg = nDramReg; cfg.nFbReg = nFbReg;
-      /* Статические таблицы дескрипторов (в DESC_DYNAMIC они живут в арене, не статикой). */
+      /* Static descriptor tables (dynamic tables live inside their arenas instead). */
       cfg.staticTableBytes = cfg.descDyn ? 0 : cfg.maxDesc * 8;
       cfg.staticTableIramBytes = (cfg.useIram && !cfg.iramDescDyn) ? cfg.iramMaxDesc * 8 : 0;
     }
-    /* Число регионов в строке Kconfig (как parseRegionConfig, но без валидации:
-     * нужно только для подсчёта байтов статики). */
+    /* Region count in the Kconfig string (using parseRegionConfig without layout validation:
+     * used only to estimate static bytes). */
     function regionCountOf(str, tag) {
       try {
         const n = parseRegionConfig(str, REGIONS_MAX).length;
         if (n > 0) return n;
-      } catch (e) { /* конфиг ещё невалиден — считаем как 1 регион (flat) */ }
+      } catch (e) { /* configuration is incomplete; estimate one flat region */ }
       return 1;
     }
     function isSliver(x) { return cfg.antiSliver && (x >>> 0) > 0 && (x >>> 0) < cfg.minSlice; }
@@ -1010,12 +1027,12 @@
     }
 
     /* ---------- v2 helpers (hint / bins / BGG / DFD / dyn desc tables) ---------- */
-    function bggLimitFor(bytes) { return Math.max(cfg.bggMin, (bytes << cfg.bggShift) >>> 0); }
+    function bggLimitFor(bytes) { return bytes >= (0xFFFFFFFF >>> cfg.bggShift) ? 0xFFFFFFFF : Math.max(cfg.bggMin, bytes * (2 ** cfg.bggShift)); }
     function binIndexFor(len) {
-      // удвоение границ: <64 → 0, <256 → 1, <1024 → 2, … последний бин — catch-all
+      // Geometric size classes; the last bin is a catch-all.
       const n = cfg.binCount;
-      let i = 0, lim = 64;
-      while (i < n - 1 && len >= lim) { lim <<= 2; i++; }
+      let i = 0, lim = 32;
+      while (i < n - 1 && len > lim) { lim *= 2; i++; }
       return i;
     }
     function regionGapsEach(ri, cb) {
@@ -1031,13 +1048,32 @@
       }
       if (re > cur) cb(cur, re - cur);
     }
-    function rebuildBins(ri) {
-      const reg = S.dram.regions[ri];
-      if (!reg.bins) return;
-      for (const b of reg.bins) b.length = 0;
-      regionGapsEach(ri, (off, len) => reg.bins[binIndexFor(len)].push({ off, len }));
-      reg.binsValid = true;
-      tr(`    region ${ri}: bins rebuilt (LRU order: newest gaps at bin tail)`);
+    function rememberReleasedGap(ri, releasedOff) {
+      if (!cfg.hintOn || ri < 0) return;
+      const r = S.dram.regions[ri];
+      regionGapsEach(ri, (off, len) => {
+        if (releasedOff < off || releasedOff >= off + len) return;
+        if (len >= r.total_bytes) { if (!cfg.bins) r.hint = null; return; }
+        if (cfg.bins) r.bins[binIndexFor(len)] = { off, len };
+        else r.hint = { off, len };
+      });
+    }
+    function trimHintsAfterAlloc(ri, off, len) {
+      if (!cfg.hintOn || ri < 0) return;
+      const r = S.dram.regions[ri], end = off + len;
+      const trim = h => {
+        if (!h || off >= h.off + h.len || end <= h.off) return h;
+        const left = Math.max(0, off - h.off), right = Math.max(0, h.off + h.len - end);
+        return left >= right ? (left ? { off: h.off, len: left } : null) : { off: end, len: right };
+      };
+      if (cfg.bins) r.bins = r.bins.map(trim);
+      else r.hint = trim(r.hint);
+    }
+    function gapAcceptable(gap, bytes, max) {
+      if (gap < bytes) return false;
+      const waste = gap - bytes;
+      return (isSliver(waste) && (!max || gap <= max)) || waste <= wasteLimitFor(bytes) ||
+        (cfg.bgg && gap <= bggLimitFor(bytes));
     }
     function hintValid(ri, h) {
       const r = S.dram.regions[ri];
@@ -1061,12 +1097,13 @@
     function dramDescGrowTry() {
       if (!S.dram.dynActive || S.dram.cap >= cfg.maxDesc) return false;
       const oldCap = S.dram.cap;
-      const newCap = Math.min(oldCap + cfg.descChunk, cfg.maxDesc);
+      const newCap = oldCap + cfg.descChunk;
+      if (newCap > cfg.maxDesc) return false;
       const need = (newCap - oldCap) * 8;
       const li = S.dram.regions.length - 1;
       const last = S.dram.regions[li];
-      if (!last) return false;
-      if (S.dram.total - need <= dramMaxBlockEnd()) return false;   // хвост занят блоками
+      if (!last || last.total_bytes < need) return false;
+      if (S.dram.total - need < dramMaxBlockEnd()) return false;   // arena tail is occupied by live blocks
       if (last.free_bytes < need) return false;
       S.dram.total -= need; S.dram.tableBytes += need; S.dram.cap = newCap;
       last.total_bytes -= need;
@@ -1075,6 +1112,9 @@
       S.dram.freeBytes = Math.max(0, S.dram.freeBytes - need);
       if (S.dram.freeBytes < S.dram.minFreeBytes) S.dram.minFreeBytes = S.dram.freeBytes;
       invalidateCache(li);
+      last.hint = null; if (last.bins) last.bins.fill(null);
+      S.stats.totalBytes -= need; S.stats.freeBytes -= need;
+      S.stats.minFreeBytes = Math.min(S.stats.minFreeBytes, S.stats.freeBytes);
       S.stats.descGrow++;
       tr(`  DESC_DYNAMIC: DRAM table ${oldCap} → ${newCap}/${cfg.maxDesc} entries — heap tail shrank by ${need} B (table = ${S.dram.tableBytes} B at [${S.dram.total}, ${S.dram.rawTotal}))`, 't-hit');
       logLine(`▲ dynamic desc table grew to ${newCap}/${cfg.maxDesc} entries (−${need} B from DRAM tail)`, 't-warn');
@@ -1092,6 +1132,8 @@
       if (last) { last.total_bytes += freedB; last.free_bytes += freedB; }
       S.dram.freeBytes += freedB;
       invalidateCache(li);
+      last.hint = null; if (last.bins) last.bins.fill(null);
+      S.stats.totalBytes += freedB; S.stats.freeBytes += freedB;
       S.stats.descShrink++;
       tr(`  DESC_DYNAMIC: usage low → DRAM table shrank to ${S.dram.cap} entries (+${freedB} B returned to heap)`, 't-hit');
       logLine(`▼ dynamic desc table shrank to ${S.dram.cap} entries (+${freedB} B to DRAM)`, 't-warn');
@@ -1099,13 +1141,13 @@
     function iramDescGrowTry() {
       if (!S.iram.dynActive || S.iram.cap >= cfg.iramMaxDesc) return false;
       const oldCap = S.iram.cap;
-      const newCap = Math.min(oldCap + cfg.descChunk, cfg.iramMaxDesc);
+      const newCap = oldCap + cfg.descChunk;
+      if (newCap > cfg.iramMaxDesc) return false;
       const need = (newCap - oldCap) * 8;
-      if (S.iram.total - need <= iramMaxBlockEnd()) return false;
+      if (S.iram.total - need < iramMaxBlockEnd()) return false;
       const fbN = S.iram.fbRegions.length;
       const last = fbN ? S.iram.fbRegions[fbN - 1] : null;
-      if (last && last.free_bytes < need) return false;
-      if (!last && S.iram.execFree < need) return false;
+      if (!last || last.total_bytes < need || last.free_bytes < need) return false;
       S.iram.total -= need; S.iram.tableBytes += need; S.iram.cap = newCap;
       S.iram.freeBytes = Math.max(0, S.iram.freeBytes - need);
       if (S.iram.freeBytes < S.iram.minFreeBytes) S.iram.minFreeBytes = S.iram.freeBytes;
@@ -1115,10 +1157,12 @@
         if (last.free_bytes < last.min_free_bytes) last.min_free_bytes = last.free_bytes;
         last.cache_valid = 0;
       } else {
-        S.iram.fbZoneStart -= need;   // таблица ест хвост EXEC-зоны
+        S.iram.fbZoneStart -= need;   // table consumes the EXEC-zone tail
         S.iram.execFree = Math.max(0, S.iram.execFree - need);
         if (S.iram.execFree < S.iram.execMinFree) S.iram.execMinFree = S.iram.execFree;
       }
+      S.stats.totalBytes -= need; S.stats.freeBytes -= need;
+      S.stats.minFreeBytes = Math.min(S.stats.minFreeBytes, S.stats.freeBytes);
       S.stats.descGrow++;
       tr(`  DESC_DYNAMIC: IRAM table ${oldCap} → ${newCap}/${cfg.iramMaxDesc} entries — IRAM tail shrank by ${need} B`, 't-hit');
       logLine(`▲ dynamic IRAM desc table grew to ${newCap}/${cfg.iramMaxDesc} entries (−${need} B)`, 't-warn');
@@ -1142,6 +1186,7 @@
         S.iram.fbZoneStart += freedB;
         S.iram.execFree = Math.min(S.iram.fbZoneStart, S.iram.execFree + freedB);
       }
+      S.stats.totalBytes += freedB; S.stats.freeBytes += freedB;
       S.stats.descShrink++;
       tr(`  DESC_DYNAMIC: IRAM table shrank to ${S.iram.cap} entries (+${freedB} B)`, 't-hit');
       logLine(`▼ dynamic IRAM desc table shrank to ${S.iram.cap} entries (+${freedB} B)`, 't-warn');
@@ -1183,7 +1228,7 @@
       document.getElementById('iramCrossGroup').style.display = (cross && useIram && iramCrossEn) ? '' : 'none';
       const fbEn = document.getElementById('cfgIramFbEnabled').checked;
       document.getElementById('cfgIramOrder').closest('.row').style.display = (useIram && fbEn) ? '' : 'none';
-      document.getElementById('iramRegionsGroup').style.display = (useIram && fbEn) ? '' : 'none';  // ← ИСПРАВЛЕНО
+      document.getElementById('iramRegionsGroup').style.display = (useIram && fbEn) ? '' : 'none';  // updated dependency
       document.getElementById('cfgExecWhole').closest('.row').style.display = (useIram && !fbEn) ? '' : 'none';
       document.getElementById('cfgFbMax').closest('.row').style.display = (useIram && fbEn) ? '' : 'none';
 
@@ -1193,19 +1238,23 @@
       const binsCb = document.getElementById('cfgBins');
       if (!hintOn && binsCb.checked)
       {
-        binsCb.checked = false;   // без hint binning недоступен (как в Kconfig/mxr_malloc.h: #error)
+        binsCb.checked = false;   // binning requires hints (Kconfig dependency / header error)
         tr('MXR_BINNING disabled: requires MXR_QUICK_FIT_HINT_ENABLE (Kconfig dependency)', 't-warn');
       }
       document.getElementById('rowBins').style.display = hintOn ? '' : 'none';
       document.getElementById('binsGroup').style.display = document.getElementById('cfgBins').checked ? '' : 'none';
       document.getElementById('bggGroup').style.display = document.getElementById('cfgBgg').checked ? '' : 'none';
       document.getElementById('dfdGroup').style.display = document.getElementById('cfgDfd').checked ? '' : 'none';
-      document.getElementById('descDynGroup').style.display = document.getElementById('cfgDescDyn').checked ? '' : 'none';
-      /* Kconfig: choice «Allocator state placement» существует только при
-       * размещении таблиц в IRAM (иначе состояние всё равно в .bss). */
       const descIram = document.getElementById('cfgDescPlace').value !== 'dram';
+      const dramDyn = document.getElementById('cfgDescDyn');
+      dramDyn.disabled = descIram;
+      if (descIram) dramDyn.checked = false;
+      const iramDyn = document.getElementById('cfgIramDescDyn');
+      iramDyn.disabled = !(useIram && fbEn);
+      if (iramDyn.disabled) iramDyn.checked = false;
+      document.getElementById('descDynGroup').style.display = (dramDyn.checked || iramDyn.checked) ? '' : 'none';
       document.getElementById('statePlaceGroup').style.display = descIram ? '' : 'none';
-      document.getElementById('rowIramDescDyn').style.display = useIram ? '' : 'none';
+      document.getElementById('rowIramDescDyn').style.display = (useIram && fbEn) ? '' : 'none';
       document.getElementById('btnCorrupt').style.display = document.getElementById('cfgCanary').checked ? '' : 'none';
       document.getElementById('btnDfree').style.display = document.getElementById('cfgDfd').checked ? '' : 'none';
     }
@@ -1236,7 +1285,8 @@
         const m = e.match(/^(\d+)-(\d+)%?$/);
         if (!m) break;
         const min_b = +m[1], pct = +m[2];
-        if (min_b > 0x7FFFFFFF || pct > 100) break;
+        if (!Number.isSafeInteger(min_b) || min_b > MAX_LEN) return [];
+        if (pct > 100) break;
         out.push({ min_bytes: min_b, percent: pct });
       }
       return out;
@@ -1353,12 +1403,12 @@
       let dramTotal = Math.floor((cfg.dramSize || 0) / 4) * 4;
       if (!(dramTotal >= 1024)) dramTotal = 1024;
 
-      /* Статика вне арен: таблицы дескрипторов + состояние (s_stats/s_region/fb).
-       * При включённом «вычитать статику» они отнимаются от бюджета той памяти,
-       * где лежат: в варианте B — из IRAM, в варианте A — из DRAM. */
-      const costD = { tables: cfg.descInIram ? 0 : cfg.staticTableBytes,
+      /* Static data outside arenas: descriptor tables and modeled state (s_stats/regions).
+       * When static subtraction is enabled, subtract each object from its memory budget:
+       * IRAM for variant B state; DRAM for variant A state. */
+      const costD = { tables: cfg.descInIram ? 0 : cfg.staticTableBytes + cfg.staticTableIramBytes,
                       state: cfg.stateInIram ? 0 : cfg.stateBytes };
-      const costI = { tables: cfg.descInIram ? cfg.staticTableBytes : 0,
+      const costI = { tables: cfg.descInIram ? cfg.staticTableBytes + cfg.staticTableIramBytes : 0,
                       state: cfg.stateInIram ? cfg.stateBytes : 0 };
       const costDram = cfg.countStatic ? (costD.tables + costD.state) : 0;
       const costIram = cfg.countStatic ? (costI.tables + costI.state) : 0;
@@ -1396,27 +1446,30 @@
       S.placement = {
         desc: cfg.descPlace, state: cfg.stateInIram ? 'iram' : 'dram',
         countStatic: cfg.countStatic, costDram, costIram,
-        tables: cfg.staticTableBytes, stateBytes: cfg.stateBytes,
+        tables: cfg.staticTableBytes + cfg.staticTableIramBytes, stateBytes: cfg.stateBytes,
         stateBytesA: cfg.stateBytesA, nDramReg: cfg.nDramReg, nFbReg: cfg.nFbReg
       };
       {
         const tName = cfg.descInIram ? (cfg.descPlace === 'iram_bss' ? '.iram0.bss' : '.iram0.text') : '.bss';
         const sName = cfg.stateInIram ? `IRAM (B, 32-bit fields, ${cfg.stateBytes} B)` : `DRAM (A, ${cfg.stateBytes} B)`;
         const tail = cfg.countStatic
-          ? `→ бюджет DRAM −${costDram} B, IRAM −${costIram} B`
-          : '→ статика не вычитается из арен (тумблер выключен)';
+          ? `→ budget DRAM −${costDram} B, IRAM −${costIram} B`
+          : '→ static data is not subtracted (option off)';
         tr(`Placement: tables ${tName}${cfg.descInIram ? ` (${cfg.staticTableBytes} B)` : ''}, state ${sName} ${tail}`, 't-hit');
       }
       if (cfg.descDyn) {
         const initCap = Math.min(cfg.descInit, cfg.maxDesc);
         const initBytes = align4(initCap * 8);
-        if (initBytes + 512 <= S.dram.total) {
+        if (initBytes + 512 < S.dram.total) {
           S.dram.cap = initCap; S.dram.dynActive = true;
           S.dram.total -= initBytes; S.dram.tableBytes = initBytes;
           S.dram.freeBytes = S.dram.total; S.dram.minFreeBytes = S.dram.total;
           tr(`DRAM DESC_DYNAMIC: carved ${initBytes} B at heap tail [${S.dram.total}, ${S.dram.rawTotal}) — table ${initCap}/${cfg.maxDesc} entries, chunk=${cfg.descChunk}`, 't-hit');
         } else {
-          tr(`DRAM DESC_DYNAMIC: arena ${S.dram.total} B too small for initial table ${initBytes} B — dynamic mode off, static table ${cfg.maxDesc}`, 't-warn');
+          errEl.textContent = 'DRAM arena too small for the initial dynamic table; heap not initialized.';
+          S.initialized = false;
+          tr(errEl.textContent, 't-err');
+          renderAll(); return;
         }
       }
       if (cfg.useIram) {
@@ -1424,8 +1477,19 @@
         if (cfg.countStatic && costIram) {
           const raw = bytes;
           bytes = Math.max(0, bytes - costIram);
-          tr(`IRAM budget: arena ${raw} B − статика ${costIram} B `
-            + `(таблицы ${costI.tables} + состояние ${costI.state}) = ${bytes} B`, 't-hit');
+          tr(`IRAM budget: arena ${raw} B − static data ${costIram} B `
+            + `(tables ${costI.tables} + state ${costI.state}) = ${bytes} B`, 't-hit');
+        }
+        if (cfg.iramDescDyn) {
+          const initCap = Math.min(cfg.descInit, cfg.iramMaxDesc), initBytes = initCap * 8;
+          if (bytes <= initBytes + 256) {
+            bytes = 0;
+            tr('IRAM dynamic table does not fit; IRAM heap disabled', 't-warn');
+          } else {
+            bytes -= initBytes;
+            S.iram.cap = initCap; S.iram.dynActive = true; S.iram.tableBytes = initBytes;
+            tr(`IRAM DESC_DYNAMIC: ${initBytes} B reserved before zone partition, capacity ${initCap}`, 't-hit');
+          }
         }
         if (bytes <= 512 || bytes >= 0x10000) {
           tr(`IRAM: size ${bytes} out of range (512, 65536) — IRAM heap disabled`, 't-warn');
@@ -1442,11 +1506,11 @@
               S.iram.fbZoneTotal = 0;
               bytes = r2; S.iram.total = r2;  // truncate arena
               S.iram.freeBytes = r2; S.iram.minFreeBytes = r2;
-              // FIX(A): как в C — если total == 0, IRAM полностью отключён
+              // FIX(A): as in C: total == 0 disables the IRAM heap
               if (r2 === 0) {
                 tr('IRAM heap: reserve=0 and fallback disabled, IRAM arena off', 't-warn');
                 S.iram.fbRegions = [];
-                // НЕ устанавливаем S.iram.enabled = true
+                // do not enable S.iram
               }
             }
           } else if (reserve >= bytes) {
@@ -1454,24 +1518,9 @@
           } else {
             S.iram.fbZoneStart = reserve; S.iram.fbZoneTotal = bytes - reserve;
           }
-          if (cfg.iramDescDyn && S.iram.total > 0) {
-            const initCap = Math.min(cfg.descInit, cfg.iramMaxDesc);
-            const initBytes = align4(initCap * 8);
-            const eatFb = S.iram.fbZoneTotal >= initBytes;
-            if (initBytes + 256 < S.iram.total && (eatFb || S.iram.fbZoneStart >= initBytes + 256)) {
-              S.iram.cap = initCap; S.iram.dynActive = true;
-              S.iram.total -= initBytes; S.iram.tableBytes = initBytes;
-              S.iram.freeBytes = S.iram.total; S.iram.minFreeBytes = S.iram.total;
-              if (eatFb) S.iram.fbZoneTotal -= initBytes;
-              else S.iram.fbZoneStart -= initBytes;   // нет fb-зоны — едим хвост EXEC-зоны
-              tr(`IRAM DESC_DYNAMIC: carved ${initBytes} B at IRAM tail — table ${initCap}/${cfg.iramMaxDesc} entries`, 't-hit');
-            } else {
-              tr('IRAM DESC_DYNAMIC: arena too small for initial table — dynamic mode off', 't-warn');
-            }
-          }
           S.iram.execFree = S.iram.fbZoneStart;
           S.iram.execMinFree = S.iram.fbZoneStart;
-          if (S.iram.total > 0) {   // FIX(A): не инициализируем при total==0
+          if (S.iram.total > 0) {   // FIX(A): do not initialize a zero-sized arena
             try { initIramFbRegions(); S.iram.enabled = true; }
             catch (e) {
               tr(`IRAM fb init: ${e} — falling back to a single flat region`, 't-warn');
@@ -1499,9 +1548,8 @@
       }
       for (const r of S.dram.regions) {
         r.hint = null;                                   // v1 quick-fit hint
-        r.bins = cfg.bins ? Array.from({ length: cfg.binCount }, () => []) : null;
-        r.binsValid = false;
-      }
+        r.bins = cfg.bins ? Array(cfg.binCount).fill(null) : null;
+        }
       let totalBytes = S.dram.total, freeBytes = S.dram.total, largest = 0;
       for (const r of S.dram.regions) if (r.total_bytes > largest) largest = r.total_bytes;
       if (S.iram.enabled) {
@@ -1536,20 +1584,20 @@
       return -1;
     }
     function descInsert(descs, cap, off, len, exec) {
-      // FIX(5): проверка инициализации (в C: if (!s_initialized) return false)
+      // FIX(5): initialization check (C: if (!s_initialized) return false)
       if (!S.initialized) return { ok: false, r: 'not initialized' };
-      // FIX(5): для IRAM в C дополнительно проверяется s_iram_enabled
+      // FIX(5): the IRAM path also checks s_iram_enabled in C
       const isIram = (descs === S.iram.desc);
       if (isIram && !S.iram.enabled) return { ok: false, r: 'IRAM heap disabled' };
       if (off > MAX_LEN) { S.stats.insertFailBounds++; return { ok: false, r: 'off > MAX_OFFSET' }; }
       if (len === 0 || len > MAX_LEN) { S.stats.insertFailBounds++; return { ok: false, r: 'len invalid' }; }
-      // FIX(1): проверка off+len <= arena_total (в C: desc_insert_fail_bounds)
+      // FIX(1): check off+len <= arena_total (C: desc_insert_fail_bounds)
       const arenaTotal = isIram ? S.iram.total : S.dram.total;
       if (off + len > arenaTotal) { S.stats.insertFailBounds++; return { ok: false, r: 'off+len exceeds arena bounds' }; }
       if (descs.length >= cap) {
         const grew = isIram ? iramDescGrowTry() : dramDescGrowTry();
         if (grew) {
-          // ВАЖНО (урок iramv2): grow уменьшил total арены → bounds-check, сделанный выше, устарел.
+          // IMPORTANT: growth reduced the arena total, so the earlier bounds check is stale.
           const t2 = isIram ? S.iram.total : S.dram.total;
           if (off + len > t2) { S.stats.insertFailBounds++; return { ok: false, r: 'off+len exceeds arena after desc-table growth' }; }
           const capNow = isIram ? S.iram.cap : S.dram.cap;
@@ -1601,10 +1649,10 @@
       if (i >= 0 && i < S.dram.regions.length) {
         const r = S.dram.regions[i];
         r.cache_valid = 0;
-        r.binsValid = false;   // v2: bins пересобираются лениво при следующем скане региона
       }
     }
-    function regionAllocated(i, bytes) {
+    function regionAllocated(i, bytes, off) {
+      if (off !== undefined) trimHintsAfterAlloc(i, off, bytes);
       if (i >= 0 && i < S.dram.regions.length) {
         const r = S.dram.regions[i];
         r.free_bytes = Math.max(0, r.free_bytes - bytes);
@@ -1616,7 +1664,8 @@
       if (S.stats.freeBytes < S.stats.minFreeBytes) S.stats.minFreeBytes = S.stats.freeBytes;
       invalidateCache(i);
     }
-    function regionReleased(i, bytes) {
+    function regionReleased(i, bytes, off) {
+      if (off !== undefined) rememberReleasedGap(i, off);
       if (i >= 0 && i < S.dram.regions.length) {
         const r = S.dram.regions[i];
         r.free_bytes = Math.min(r.total_bytes, r.free_bytes + bytes);
@@ -1654,9 +1703,9 @@
             const alloc = sliverExpand(gap, waste, maxAllowed, bytes, 'find_best_free', 'dram', label);
             return { stop: true, off: gapStart, alloc, largest, largestOff, exact: false, gapUsed: gap };
           }
-          if (cfg.bgg && gap >= bggLimitFor(bytes)) {
+          if (cfg.bgg && gap <= bggLimitFor(bytes)) {
             S.stats.bggRelaxed++;
-            tr(`    gap @${gapStart} size ${gap}: BIG GAP >= ${bggLimitFor(bytes)} → relaxed accept (bgg_relaxed_accepts++)`, 't-hit');
+            tr(`    gap @${gapStart} size ${gap}: non-baton gap <= ${bggLimitFor(bytes)} → relaxed accept (bgg_relaxed_accepts++)`, 't-hit');
             recordEE({ arena: 'dram', label, size: bytes, gap, waste, limit: bggLimitFor(bytes), off: gapStart, exact: false, bgg: true });
             const alloc = sliverExpand(gap, waste, maxAllowed, bytes, 'find_best_free(bgg)', 'dram', label);
             return { stop: true, off: gapStart, alloc, largest, largestOff, exact: false, gapUsed: gap };
@@ -1682,30 +1731,7 @@
       return { found: false, largest, largestOff, exact: true, gapUsed: 0 };
     }
     function findFreeAndLargest(ri, bytes) {
-      const reg = S.dram.regions[ri];
-      const rs = reg.start_byte, re = rs + reg.total_bytes, maxAllowed = reg.max_bytes;
-      const wLimit = wasteLimitFor(bytes);
-      const label = 'DRAM r' + ri;
-      let cur = rs, bestOff = 0, bestGap = Infinity, found = false, largest = 0;
-      const consider = (gapStart, gap) => {
-        if (gap > largest) largest = gap;
-        if (gap >= bytes) {
-          const waste = gap - bytes;
-          if (!found && waste <= wLimit) { bestOff = gapStart; bestGap = gap; found = true; }
-          else if (!found || gap < bestGap || (gap === bestGap && gapStart < bestOff)) { bestOff = gapStart; bestGap = gap; found = true; }
-        }
-      };
-      for (const d of S.dram.desc) {
-        const off = d.off, be = off + d.len;
-        if (be <= rs) continue; if (off >= re) break;
-        if (off > cur) consider(cur, off - cur);
-        if (be > cur) cur = be;
-        if (cur >= re) break;
-      }
-      if (re > cur) consider(cur, re - cur);
-      let alloc = bytes;
-      if (found) alloc = sliverExpand(bestGap, bestGap - bytes, maxAllowed, bytes, 'cross find', 'dram', label);
-      return { found, off: bestOff, alloc, largest };
+      return findBestFree(ri, bytes);
     }
     function tryAllocRegion(ri, bytes) {
       const reg = S.dram.regions[ri];
@@ -1716,56 +1742,25 @@
       if (reg.cache_valid && reg.largest_cache < bytes) {
         tr(`    region ${ri}: largest_cache=${reg.largest_cache} < ${bytes} → skipped (cache)`, 't-hit'); return null;
       }
-      /* v1: quick-fit hint — O(1) приём закэшированного гэпа (перепроверен бинарным поиском) */
-      if (cfg.hintOn && reg.hint) {
-        const hh = reg.hint;
-        if (hh.len >= bytes && hintValid(ri, hh)) {
-          const waste = hh.len - bytes;
-          const alloc = sliverExpand(hh.len, waste, reg.max_bytes, bytes, 'quick-fit hint', 'dram', label);
+      const slots = cfg.bins ? (reg.bins || []).slice(binIndexFor(bytes)) : [reg.hint];
+      if (cfg.hintOn) for (const h of slots) {
+        if (!h || h.len < bytes) continue;
+        if (hintValid(ri, h) && gapAcceptable(h.len, bytes, reg.max_bytes)) {
+          const waste = h.len - bytes;
+          const expands = isSliver(waste) && (!reg.max_bytes || h.len <= reg.max_bytes);
+          if (!expands && waste > wasteLimitFor(bytes) && cfg.bgg) S.stats.bggRelaxed++;
+          const alloc = sliverExpand(h.len, waste, reg.max_bytes, bytes, 'cached gap', 'dram', label);
           S.stats.hintHits++;
-          const rem = hh.len - alloc;
-          reg.hint = rem >= ALIGN ? { off: hh.off + alloc, len: rem } : null;   // LRU: остаток
-          tr(`    region ${ri}: QUICK-FIT HINT @${hh.off} len ${hh.len} → HIT (hint_hits++, full best-fit scan skipped)`, 't-hit');
-          return { off: hh.off, alloc };
+          if (cfg.bins) S.stats.binHits++;
+          tr(`    region ${ri}: cached gap @${h.off} len ${h.len} accepted`, 't-hit');
+          return { off: h.off, alloc };
         }
         S.stats.hintMiss++;
-        tr(`    region ${ri}: hint stale/too small → miss, falling back to scan`);
-        reg.hint = null;
-      }
-      /* v2: segregated bins — LRU-скан бина нужного класса размера */
-      if (cfg.bins && reg.bins) {
-        if (!reg.binsValid) rebuildBins(ri);
-        let chosen = null;
-        for (let b = binIndexFor(bytes); b < reg.bins.length; b++) {
-          const arr = reg.bins[b];
-          for (let k = arr.length - 1; k >= 0; k--) {          // LRU: с хвоста
-            const g = arr[k];
-            if (g.len >= bytes && (!chosen || g.len < chosen.len)) { chosen = g; if (g.len === bytes) break; }
-          }
-          if (chosen && chosen.len === bytes) break;
-        }
-        if (chosen) {
-          const waste = chosen.len - bytes;
-          const alloc = sliverExpand(chosen.len, waste, reg.max_bytes, bytes, 'bins', 'dram', label);
-          S.stats.binHits++;
-          const rem = chosen.len - alloc;
-          reg.hint = rem >= ALIGN ? { off: chosen.off + alloc, len: rem } : null;   // LRU: остаток → hint
-          tr(`    region ${ri}: BIN hit (class ${binIndexFor(chosen.len)}, gap len ${chosen.len}) @${chosen.off} (bin_hits++, full scan skipped)`, 't-hit');
-          return { off: chosen.off, alloc };
-        }
-        S.stats.binMiss++;
-        tr(`    region ${ri}: bins miss → full best-fit scan`);
+        if (cfg.bins) S.stats.binMiss++;
       }
       const res = findBestFree(ri, bytes);
       if (res.exact) { reg.largest_cache = res.largest; reg.cache_valid = 1; }
       else reg.cache_valid = 0;
-      // LRU hint update: остаток использованного гэпа; если гэп не найден — наибольший из виденных
-      if (res.found) {
-        const rem = res.gapUsed - res.alloc;
-        reg.hint = rem >= ALIGN ? { off: res.off + res.alloc, len: rem } : null;
-      } else {
-        reg.hint = (res.largest >= ALIGN) ? { off: res.largestOff, len: res.largest } : null;
-      }
       if (!res.found) return null;
       return { off: res.off, alloc: res.alloc };
     }
@@ -1795,11 +1790,11 @@
           tr(`    cross: region ${i} — min_bytes guard reject: ${bytes}×${cfg.dramDiv} < ${r.min_bytes} (cross_guard_rej++)`); continue;
         }
         const res = findFreeAndLargest(i, bytes);
-        r.largest_cache = res.largest; r.cache_valid = 1;
+        r.largest_cache = res.largest; r.cache_valid = res.exact ? 1 : 0;
         if (!res.found) { S.stats.crossSkipFrag++; tr(`    cross: region ${i} fragmented (cross_skip_fragmented++)`); continue; }
         const ins = descInsert(S.dram.desc, S.dram.cap, res.off, res.alloc, false);
         if (!ins.ok) { tr(`    cross: insert fail: ${ins.r}`, 't-err'); return null; }
-        r.alloc_count++; regionAllocated(i, res.alloc); S.stats.crossAllocs++;
+        r.alloc_count++; regionAllocated(i, res.alloc, res.off); S.stats.crossAllocs++;
         tr(`    cross: ALLOCATED in region ${i} @off ${res.off} len ${res.alloc} (cross_region_allocs++, from region ${skipRegion})`, 't-ok');
         return commitAlloc('dram', res.off, res.alloc, caps, 'dram-cross', skipRegion, i);
       }
@@ -1872,15 +1867,19 @@
       if (zoneEnd > cur && zoneEnd - cur >= bytes) return cur;
       return null;
     }
+    function fallbackMaxAllowed(regionMax) {
+      return cfg.fbMax && (!regionMax || cfg.fbMax < regionMax) ? cfg.fbMax : regionMax;
+    }
     function iramFbFindFreeInRegion(reg, bytes) {
-      if (reg < 0 || reg >= S.iram.fbRegions.length) return null;
+      if (reg < 0 || reg >= S.iram.fbRegions.length) return { found: false, largest: 0, exact: false };
       const r = S.iram.fbRegions[reg];
-      const rs = r.start_byte, re = fbRegionEnd(reg), maxAllowed = r.max_bytes;
+      const rs = r.start_byte, re = fbRegionEnd(reg), maxAllowed = fallbackMaxAllowed(r.max_bytes);
       const label = 'IRAM fb r' + reg;
-      if (r.free_bytes < bytes) return null;
+      if (r.free_bytes < bytes) return { found: false, largest: 0, exact: false };
       const wLimit = wasteLimitFor(bytes);
-      let cur = rs, bestOff = 0, bestGap = Infinity, found = false;
-      const consider = (gapStart, gap) => {
+      let cur = rs, bestOff = 0, bestGap = Infinity, found = false, largest = 0;
+      const consider = (gapStart, gap, tail = false) => {
+        largest = Math.max(largest, gap);
         if (gap >= bytes) {
           const waste = gap - bytes;
           if (waste <= wLimit) {
@@ -1892,17 +1891,17 @@
             }
             return { stop: true, off: gapStart + gap - bytes, alloc: bytes };
           }
-          if (cfg.bgg && gap >= bggLimitFor(bytes)) {
+          if (!tail && cfg.bgg && gap <= bggLimitFor(bytes)) {
             S.stats.bggRelaxed++;
             recordEE({ arena: 'iram', label, size: bytes, gap, waste, limit: bggLimitFor(bytes), off: gapStart, exact: false, bgg: true });
-            tr(`    IRAM fb: BIG GAP ${gap} >= ${bggLimitFor(bytes)} → relaxed accept (bgg_relaxed_accepts++)`, 't-hit');
+            tr(`    IRAM fb: non-baton gap ${gap} <= ${bggLimitFor(bytes)} → relaxed accept (bgg_relaxed_accepts++)`, 't-hit');
             if (isSliver(waste) && (maxAllowed === UNLIMITED || gap <= maxAllowed)) {
               afExpansion('iram', label, bytes, waste, gap, 'iram fb bgg');
               return { stop: true, off: gapStart, alloc: gap };
             }
             return { stop: true, off: gapStart + gap - bytes, alloc: bytes };
           }
-          // best-fit: меньший gap лучше; при равенстве — выше адрес
+          // best-fit: prefer the smaller gap; break ties toward the higher address
           if (!found || gap < bestGap || (gap === bestGap && gapStart > bestOff)) {
             bestGap = gap; bestOff = gapStart; found = true;
           }
@@ -1912,23 +1911,23 @@
       for (const d of S.iram.desc) {
         const off = d.off, be = off + d.len;
         if (be <= rs) continue; if (off >= re) break;
-        if (off > cur) { const r2 = consider(cur, off - cur); if (r2) return r2; }
+        if (off > cur) { const r2 = consider(cur, off - cur); if (r2) return { found: true, largest, exact: false, ...r2 }; }
         if (be > cur) cur = be;
         if (cur >= re) break;
       }
-      if (re > cur) { const r2 = consider(cur, re - cur); if (r2) return r2; }
-      if (!found) return null;
+      if (re > cur) { const r2 = consider(cur, re - cur, true); if (r2) return { found: true, largest, exact: false, ...r2 }; }
+      if (!found) return { found: false, largest, exact: true };
       const waste = bestGap - bytes;
       if (isSliver(waste) && (maxAllowed === UNLIMITED || bestGap <= maxAllowed)) {
         afExpansion('iram', label, bytes, waste, bestGap, 'iram fb best-fit');
-        return { off: bestOff, alloc: bestGap };
+        return { found: true, off: bestOff, alloc: bestGap, largest, exact: true };
       }
-      return { off: bestOff + bestGap - bytes, alloc: bytes }; // top-aligned
+      return { found: true, off: bestOff + bestGap - bytes, alloc: bytes, largest, exact: true }; // top-aligned
     }
     function iramFbFindFreeAndLargest(reg, bytes) {
       if (reg < 0 || reg >= S.iram.fbRegions.length) return { found: false, largest: 0 };
       const r = S.iram.fbRegions[reg];
-      const rs = r.start_byte, re = fbRegionEnd(reg), maxAllowed = r.max_bytes;
+      const rs = r.start_byte, re = fbRegionEnd(reg), maxAllowed = fallbackMaxAllowed(r.max_bytes);
       const label = 'IRAM fb r' + reg;
       if (r.free_bytes < bytes) return { found: false, largest: 0 };
       let cur = rs, largest = 0, found = false, outOff = 0, outAlloc = bytes;
@@ -2010,7 +2009,7 @@
       S.stats.freeBytes = S.stats.freeBytes >= bytes ? S.stats.freeBytes - bytes : 0;
       if (S.stats.freeBytes < S.stats.minFreeBytes) S.stats.minFreeBytes = S.stats.freeBytes;
       if (isExec) {
-        // FIX(2): EXEC не трогает fb-регионы (зоны не пересекаются) — как в C
+        // FIX(2): EXEC does not modify fallback regions (disjoint zones), as in C
         S.iram.execFree = S.iram.execFree >= bytes ? S.iram.execFree - bytes : 0;
         if (S.iram.execFree < S.iram.execMinFree) S.iram.execMinFree = S.iram.execFree;
       }
@@ -2020,7 +2019,7 @@
       S.iram.freeBytes = Math.min(S.iram.total, S.iram.freeBytes + bytes);
       S.stats.freeBytes = Math.min(S.stats.totalBytes, S.stats.freeBytes + bytes);
       if (isExec) {
-        // FIX(2): EXEC не трогает fb-регионы — как в C
+        // FIX(2): EXEC does not modify fallback regions, as in C
         const cap = iramExecZoneEnd();
         const nf = S.iram.execFree + bytes;
         S.iram.execFree = nf > cap ? cap : nf;
@@ -2062,7 +2061,7 @@
     }
     function commitAlloc(arena, off, len, caps, path, fromReg, toReg) {
       const base = arena === 'dram' ? DRAM_BASE : IRAM_BASE;
-      const ptr = base + off + cfg.canaryHead;    // v2 canary: user ptr = payload (после head-поля)
+      const ptr = base + off + cfg.canaryHead;    // v2 canary: user ptr = payload (after the head canary)
       allocs[ptr] = { id: nextId++, arena, off, len, caps, path, fromReg, toReg };
       if (cfg.canary) { allocs[ptr].can = { h: true, t: true }; allocs[ptr].usize = Math.max(0, len - cfg.canaryOv); }
       pushHistory({ opNo, size: len, caps, path, arena, ptr, fromReg, toReg });
@@ -2078,8 +2077,9 @@
     function mallocCapsLocked(size, caps) {
       if (!S.initialized) { tr('  ! not initialized', 't-err'); return null; }
       if (size === 0) size = 1;
-      if (size > MAX_LEN) { S.stats.failNoMem++; tr(`  size overflow`, 't-err'); return null; }
+      if (!Number.isSafeInteger(size) || size < 0 || size > MAX_LEN) { S.stats.failNoMem++; tr(`  size overflow`, 't-err'); return null; }
       size = align4(size);
+      if (size > MAX_LEN - cfg.canaryOv) { S.stats.failNoMem++; return null; }
       const bytes = size + cfg.canaryOv;
       tr(`  aligned size: ${size} bytes${cfg.canary ? ' + canary 8 (head 4 | payload | tail 4) = ' + bytes : ''}, caps=${capsStr(caps)}`);
       if (caps & CAP_EXEC) {
@@ -2122,7 +2122,7 @@
           const ins = descInsert(S.dram.desc, S.dram.cap, res.off, res.alloc, false);
           if (!ins.ok) { tr('  insert fail: ' + ins.r, 't-err'); return null; }
           S.dram.regions[region].alloc_count++;
-          regionAllocated(region, res.alloc);
+          regionAllocated(region, res.alloc, res.off);
           tr(`  DRAM: allocated @DRAM+${res.off} len ${res.alloc} in region ${region}`, 't-ok');
           return commitAlloc('dram', res.off, res.alloc, caps, 'dram-own', null, region);
         }
@@ -2153,8 +2153,9 @@
         } else {
           tr(`    step 1: fb region ${fbReg}, best-fit top-aligned`);
           const res = iramFbFindFreeInRegion(fbReg, bytes);
-          if (res) { found = true; off = res.off; allocBytes = res.alloc; }
-          else { r.largest_cache = iramFbRegionLargest(fbReg); r.cache_valid = 1; }
+          r.cache_valid = res.exact ? 1 : 0;
+          if (res.exact) r.largest_cache = res.largest;
+          if (res.found) { found = true; off = res.off; allocBytes = res.alloc; }
         }
         if (found) {
           const ins = descInsert(S.iram.desc, S.iram.cap, off, allocBytes, false);
@@ -2215,7 +2216,7 @@
         const off = ptr - DRAM_BASE - cfg.canaryHead;
         const idx = descFindKey(S.dram.desc, off);
         if (idx < 0) {
-          if (dfdContains(ptr) || (cfg.dfd && fa)) {
+          if (dfdContains(ptr)) {
             S.stats.dfdHits++;
             tr(`  free: DOUBLE FREE of ${hex(ptr)} — detected via DFD ring (double_free_detected++), ignored`, 't-err');
           } else {
@@ -2231,7 +2232,7 @@
         if (cfg.canary) tr('  canary: head+tail verified OK before free');
         if (reg >= 0) {
           if (S.dram.regions[reg].alloc_count > 0) S.dram.regions[reg].alloc_count--;
-          regionReleased(reg, len);
+          regionReleased(reg, len, off);
         } else {
           S.dram.freeBytes = Math.min(S.dram.total, S.dram.freeBytes + len);
           S.stats.freeBytes = Math.min(S.stats.totalBytes, S.stats.freeBytes + len);
@@ -2244,7 +2245,7 @@
       const off = ptr - IRAM_BASE - cfg.canaryHead;
       const idx = descFindKey(S.iram.desc, off);
       if (idx < 0) {
-        if (dfdContains(ptr) || (cfg.dfd && fa)) {
+        if (dfdContains(ptr)) {
           S.stats.dfdHits++;
           tr(`  free: DOUBLE FREE of ${hex(ptr)} — detected via DFD ring, ignored`, 't-err');
         } else {
@@ -2273,15 +2274,25 @@
     }
 
     function mxrRealloc(ptr, newsize, caps) {
+      const result = mxrReallocImpl(ptr, newsize, caps);
+      if (result && allocs[result]) {
+        allocs[result].len = descLenByPtr(result);
+        allocs[result].usize = Math.max(1, newsize);
+        allocs[result].caps = caps;
+      }
+      return result;
+    }
+    function mxrReallocImpl(ptr, newsize, caps) {
       if (!ptr) return mallocCapsLocked(newsize, caps);
       if (!S.initialized) return null;
       if (newsize === 0) { tr('  realloc(…,0): MXR_REALLOC_ZERO_FREES=1 → free'); if (mxrFree(ptr)) delete allocs[ptr]; return null; }
-      if (newsize > MAX_LEN) return null;
+      if (!Number.isSafeInteger(newsize) || newsize < 0 || newsize > MAX_LEN) { S.stats.failNoMem++; return null; }
       newsize = align4(newsize);
-      const newBytes = newsize;
+      if (newsize > MAX_LEN - cfg.canaryOv) { S.stats.failNoMem++; return null; }
+      const newBytes = newsize + cfg.canaryOv;
       const arena = ptrToArena(ptr);
       if (!arena) { S.stats.invalidFree++; tr('  realloc: ptr outside arenas', 't-err'); return null; }
-      /* v2 canary: verify before realloc (detect in realloc, как в C) */
+      /* v2 canary: verify before realloc (detect in realloc, as in C) */
       const ra = allocs[ptr];
       if (cfg.canary && ra && ra.can && (!ra.can.h || !ra.can.t)) {
         S.stats.canaryViol++;
@@ -2306,7 +2317,7 @@
             return ptr;
           }
           S.dram.desc[idx].len = newBytes;
-          regionReleased(region, diff);
+          regionReleased(region, diff, off + newBytes);
           tr(`  shrink in-place: ${diff} bytes returned to region ${region}`, 't-ok');
           return ptr;
         }
@@ -2328,18 +2339,18 @@
                 recordAF({ type: 'grow-absorb', where: 'dram realloc grow', arena: 'dram', label: 'DRAM r' + region, size: oldBytes, requested: newBytes, tail, gap, alloc: actualNew });
               }
               S.dram.desc[idx].len = actualNew;
-              regionAllocated(region, actualNew - oldBytes);
+              regionAllocated(region, actualNew - oldBytes, off + oldBytes);
               tr('  grow in-place OK', 't-ok');
               return ptr;
             }
           }
         }
-        const copy = Math.min(oldBytes, newBytes);
-        tr(`  in-place impossible → move: malloc(${newsize}) + memcpy4(${copy}) + free(old)`);
+        const copy = Math.min(oldBytes - cfg.canaryOv, newsize);
+        tr(`  in-place impossible → move: malloc(${newsize}) + unlocked memcpy4(${copy}) + re-find/free(old)`);
         const np = mallocCapsLocked(newsize, caps);
         if (!np) { tr('  realloc: new block failed — old block preserved', 't-warn'); return null; }
         if (mxrFree(ptr)) delete allocs[ptr];
-        else tr('  realloc: old block QUARANTINED by canary — left allocated (leak by design, как в C)', 't-warn');
+        else tr('  realloc: old block QUARANTINED by canary — left allocated (leak by design, as in C)', 't-warn');
         return np;
       }
       const off = ptr - IRAM_BASE - cfg.canaryHead;
@@ -2347,7 +2358,7 @@
       if (idx < 0) { S.stats.invalidFree++; tr('  IRAM realloc: descriptor not found', 't-err'); return null; }
       let oldExec = S.iram.desc[idx].exec;
       const oldBytes = S.iram.desc[idx].len;
-      // УДАЛИТЬ: if (oldExec && !(caps & CAP_EXEC)) { caps |= CAP_EXEC; }
+      // Do not implicitly preserve CAP_EXEC when the caller changes capabilities.
       const wantExec = !!(caps & CAP_EXEC);
       let inPlaceAllowed;
       if (wantExec) {
@@ -2359,7 +2370,7 @@
       }
       tr(`  IRAM realloc: old=${oldBytes} new=${newBytes} exec=${oldExec} inPlaceAllowed=${inPlaceAllowed}`);
       const irLabel = oldExec ? 'EXEC zone' : ('IRAM fb r' + iramFbRegionByOff(off));
-      // FIX(1.4): region_size_ok ПЕРЕД early-return (как в C), и без дубля
+      // FIX(1.4): region_size_ok BEFORE the early return (as in C), without a duplicate check
       if (inPlaceAllowed && !oldExec) {
         const reg = iramFbRegionByOff(off);
         if (!iramFbRegionSizeOk(reg, newBytes)) inPlaceAllowed = false;
@@ -2381,7 +2392,7 @@
           return ptr;
         }
         const extra = newBytes - oldBytes;
-        // grow (проверки уже выполнены выше)
+        // grow (checks already performed above)
         const blockEnd = off + oldBytes;
         let nextBoundary = (idx + 1 < S.iram.desc.length) ? S.iram.desc[idx + 1].off : S.iram.total;
         if (oldExec) {
@@ -2422,12 +2433,12 @@
           }
         }
       }
-      const copy = Math.min(oldBytes, newBytes);
-      tr(`  IRAM realloc: move (copy ${copy})`);
+      const copy = Math.min(oldBytes - cfg.canaryOv, newsize);
+      tr(`  IRAM realloc: move (copy ${copy} payload bytes outside the C allocator lock, then re-find/free old)`);
       const np = mallocCapsLocked(newsize, caps);
       if (!np) return null;
       if (mxrFree(ptr)) delete allocs[ptr];
-      else tr('  realloc: old block QUARANTINED by canary — left allocated (leak by design, как в C)', 't-warn');
+      else tr('  realloc: old block QUARANTINED by canary — left allocated (leak by design, as in C)', 't-warn');
       return np;
     }
     function opRealloc(ptr, newsize, caps) {
@@ -2446,6 +2457,7 @@
 
     function dramRegionLargest(i) {
       const r = S.dram.regions[i], rs = r.start_byte, re = rs + r.total_bytes;
+      if (r.cache_valid) return r.largest_cache;
       let cur = rs, largest = 0;
       for (const d of S.dram.desc) {
         const be = d.off + d.len;
@@ -2455,10 +2467,12 @@
         if (cur >= re) break;
       }
       if (re > cur && re - cur > largest) largest = re - cur;
+      r.largest_cache = largest; r.cache_valid = 1;
       return largest;
     }
     function iramFbRegionLargest(reg) {
       const r = S.iram.fbRegions[reg], rs = r.start_byte, re = fbRegionEnd(reg);
+      if (r.cache_valid) return r.largest_cache;
       let cur = rs, largest = 0;
       for (const d of S.iram.desc) {
         const be = d.off + d.len;
@@ -2468,6 +2482,7 @@
         if (cur >= re) break;
       }
       if (re > cur && re - cur > largest) largest = re - cur;
+      r.largest_cache = largest; r.cache_valid = 1;
       return largest;
     }
     function clampLargest(largest, maxBytes) {
@@ -2480,10 +2495,26 @@
       st.dramDescCapacity = S.dram.cap; st.iramDescCapacity = S.iram.cap;
       st.regionCount = S.dram.regions.length; st.iramFbRegionCount = S.iram.fbRegions.length;
       let total = 0, free = 0, largest = 0;
-      for (let i = 0; i < S.dram.regions.length; i++) {
-        total += S.dram.regions[i].total_bytes; free += S.dram.regions[i].free_bytes;
-        const lr = clampLargest(dramRegionLargest(i), S.dram.regions[i].max_bytes);
-        if (lr > largest) largest = lr;
+      let totalGap = 0, gapCount = 0, sliverCount = 0, dramLargest = 0, cursor = 0;
+      for (const r of S.dram.regions) {
+        total += r.total_bytes; free += r.free_bytes;
+        let cur = r.start_byte, rawLargest = 0;
+        const end = cur + r.total_bytes;
+        const gap = size => {
+          if (size <= 0) return;
+          totalGap += size; gapCount++;
+          if (isSliver(size)) sliverCount++;
+          rawLargest = Math.max(rawLargest, size);
+        };
+        while (cursor < S.dram.desc.length) {
+          const d = S.dram.desc[cursor];
+          if (d.off >= end) break;
+          gap(d.off - cur); cur = Math.max(cur, d.off + d.len); cursor++;
+        }
+        gap(end - cur);
+        r.largest_cache = rawLargest; r.cache_valid = 1;
+        dramLargest = Math.max(dramLargest, rawLargest);
+        largest = Math.max(largest, clampLargest(rawLargest, r.max_bytes));
       }
       st.iramExecZoneTotal = 0; st.iramExecZoneFree = 0; st.iramExecZoneMinFree = 0;
       if (S.iram.enabled) {
@@ -2498,18 +2529,6 @@
       const trackedFree = st.freeBytes, trackedTotal = st.totalBytes;
       st.totalBytes = total; st.freeBytes = free; st.largest = largest;
       if (free < st.minFreeBytes) st.minFreeBytes = free;
-      let totalGap = 0, gapCount = 0, sliverCount = 0, dramLargest = 0;
-      for (let ri = 0; ri < S.dram.regions.length; ri++) {
-        const r = S.dram.regions[ri];
-        let cur = r.start_byte; const end = cur + r.total_bytes;
-        for (const d of S.dram.desc) {
-          const be = d.off + d.len;
-          if (be <= r.start_byte) continue; if (d.off >= end) break;
-          if (d.off > cur) { const g = d.off - cur; totalGap += g; gapCount++; if (g > dramLargest) dramLargest = g; if (isSliver(g)) sliverCount++; }
-          if (be > cur) cur = be;
-        }
-        if (end > cur) { const g = end - cur; totalGap += g; gapCount++; if (g > dramLargest) dramLargest = g; if (isSliver(g)) sliverCount++; }
-      }
       st.gapCount = gapCount; st.sliverCount = sliverCount;
       st.fragPct = (totalGap > 0 && dramLargest < totalGap) ? Math.floor((totalGap - dramLargest) * 100 / totalGap) : 0;
       if (trackedFree !== free || trackedTotal !== total)
@@ -2782,13 +2801,14 @@
         ['bgg relaxed', st.bggRelaxed], ['canary_violations', st.canaryViol], ['double_free_detected', st.dfdHits],
         ['desc grow/shrink', `${st.descGrow}/${st.descShrink}`], ['desc table B d/i', `${S.dram.tableBytes}/${S.iram.tableBytes}`],
         ['placement', placementLabel()],
+        ['ordinary malloc caps', capsStr(defaultCaps())],
         ['min_free(8BIT)', getMinFreeSizeCaps(CAP_8BIT)], ['min_free(32BIT)', getMinFreeSizeCaps(CAP_32BIT)], ['min_free(EXEC)', getMinFreeSizeCaps(CAP_EXEC)],
       ];
       document.getElementById('statGrid').innerHTML = g.map(([k, v]) => `<span class="k">${k}</span><span></span><span class="v">${v}</span>`).join('');
       const row = (r, i, largest) => `<tr><td>${i}</td><td class="l">[${r.min_bytes}..${r.max_bytes || '∞'}]</td><td>${r.total_bytes}</td><td>${r.free_bytes}</td><td>${r.min_free_bytes}</td><td>${largest}</td><td>${r.alloc_count}</td><td>${r.cache_valid ? r.largest_cache : '—'}</td></tr>`;
       document.querySelector('#dramRegTable tbody').innerHTML =
         S.dram.regions.map((r, i) => row(r, i, clampLargest(dramRegionLargest(i), r.max_bytes))
-          .replace('</tr>', `<td title="quick-fit hint: cached largest gap">${cfg.hintOn ? (r.hint ? r.hint.len : '—') : 'off'}</td></tr>`)).join('');
+          .replace('</tr>', `<td title="Most recently remembered gap (one slot per class when binning)">${cfg.hintOn ? (cfg.bins ? (r.bins || []).map(h => h ? h.len : '—').join('/') : r.hint ? r.hint.len : '—') : 'off'}</td></tr>`)).join('');
       document.querySelector('#iramRegTable tbody').innerHTML = S.iram.enabled ?
         S.iram.fbRegions.map((r, i) => row(r, i, clampLargest(iramFbRegionLargest(i), r.max_bytes))).join('') :
         '<tr><td colspan="8" class="l">IRAM disabled</td></tr>';
@@ -2821,6 +2841,14 @@
       if (document.getElementById('capInt').checked) c |= CAP_INTERNAL;
       return c;
     }
+    function defaultCaps() { return cfg.defaultDramOnly ? CAP_8BIT | CAP_32BIT : CAP_32BIT; }
+    function uiDefaultCalloc() { opCalloc(1, +document.getElementById('opSize').value, defaultCaps()); }
+    function uiDefaultZalloc() { opMalloc(+document.getElementById('opSize').value, defaultCaps(), 'ordinary zalloc: memory zeroed'); }
+    function modalApplyDefault() {
+      const ptr = modalPtr, size = +document.getElementById('reallocSize').value;
+      modalClose(); opRealloc(ptr, size, defaultCaps());
+    }
+    function uiDefaultMalloc() { opMalloc(+document.getElementById('opSize').value, defaultCaps(), 'ordinary malloc: default policy'); }
     function uiMalloc() { opMalloc(+document.getElementById('opSize').value, getCapsFromForm()); }
     function uiCalloc() { const s = +document.getElementById('opSize').value; opCalloc(1, s, getCapsFromForm()); }
     function uiZalloc() { opMalloc(+document.getElementById('opSize').value, getCapsFromForm(), 'zalloc: memory zeroed'); }
@@ -2856,13 +2884,13 @@
       opFree(p); opFree(p);
     }
     function scenarioV2() {
-      logLine('=== v2 safety demo: canary quarantine + double-free detection ===', 't-op');
+      logLine('=== Safety demo: canary quarantine + double-free detection ===', 't-op');
       if (!cfg.canary && !cfg.dfd) {
         logLine('Enable MXR_CANARY and/or MXR_DOUBLE_FREE_DETECT in the settings (left panel, "Optimization") and run this demo again', 't-warn');
         return;
       }
-      const a = opMalloc(48, CAP_8BIT, 'v2 demo A');
-      const b = opMalloc(48, CAP_8BIT, 'v2 demo B');
+      const a = opMalloc(48, CAP_8BIT, 'safety demo A');
+      const b = opMalloc(48, CAP_8BIT, 'safety demo B');
       if (cfg.canary && a) {
         uiCorrupt(a, 'h');
         logLine(`--- free(${hex(a)}) with a corrupted head canary → violation: block is QUARANTINED (stays in table, memory leaks by design — exactly like mxr_malloc.c) ---`, 't-op');
@@ -2926,7 +2954,7 @@
       opMalloc(8 * 9, CAP_8BIT, 'run_pwm[1]');
     }
     function scenarioSPI() {
-      logLine('=== Scenario spi.c: spi_init (HSPI) — buf goes to IRAM fallback as pure 32BIT ===', 't-op');
+      logLine('=== Scenario spi.c: spi_init (HSPI) — 32BIT buffer is eligible for IRAM fallback ===', 't-op');
       opMalloc(24, CAP_8BIT, 'spi_object_t');
       opMalloc(64, CAP_32BIT, 'spi buf 16×uint32 (MALLOC_CAP_32BIT)');
     }
@@ -2965,7 +2993,7 @@
         } else {
           const p = live[rnd(live.length)];
           const a = allocs[p];
-          if (!a) continue;   // ptr уже освобождён ранее в этом же батче (или в карантине)
+          if (!a) continue;   // pointer was already freed in this batch (or quarantined)
           const ns = Math.max(4, Math.floor(a.len * (0.5 + Math.random() * 1.5)));
           tr(`stress realloc(${hex(p)}, ${ns})`, 't-op');
           const np = mxrRealloc(p, ns, a.caps);
@@ -3008,7 +3036,7 @@
       return [cfg.dramSize, cfg.iramSize, cfg.useIram, cfg.reserve,
       cfg.iramFbEnabled, cfg.execWhole, cfg.dramRegions, cfg.iramRegions,
       cfg.canary, cfg.descDyn, cfg.descInit, cfg.descChunk, cfg.iramDescDyn,
-      cfg.descPlace, cfg.statePlace, cfg.countStatic].join('|');
+      cfg.descPlace, cfg.statePlace, cfg.countStatic, cfg.maxDesc, cfg.iramMaxDesc, cfg.compact, cfg.dfd, cfg.dfdRing, cfg.bins, cfg.binCount, cfg.hintOn].join('|');
     }
     function applySettings() {
       readConfig();
@@ -3043,10 +3071,9 @@
     mxrInit();
     logLine('Simulator ready. malloc path order: EXEC (first-fit INSIDE [0, reserve) only) → DRAM own region (best-fit) → DRAM cross-region → IRAM fallback (best-fit, top-aligned, AFTER DRAM by default). Order configurable via cfgIramOrder.', 't-warn');
     logLine('Cross-region is gated per arena: MXR_DRAM_CROSS_ENABLED / MXR_IRAM_CROSS_ENABLED checkboxes + "All (no guard)" option disables the max_bytes GUARD entirely. Guard rejections are counted in cross_guard_rej.', 't-warn');
-    logLine('v2 (all menuconfig options, default OFF — matching Kconfig): BINNING · BIG_GAP_GUARD · CANARY (+8 B/block, ✗H/✗T inject buttons, quarantine on free/realloc) · DOUBLE_FREE_DETECT (ring, 2×free buttons) · dynamic descriptor tables carved from heap tail with grow/shrink.', 't-warn');
+    logLine('Optional features (default off): BINNING · BIG_GAP_GUARD · CANARY (+8 B/block, ✗H/✗T inject buttons, quarantine on free/realloc) · DOUBLE_FREE_DETECT (ring, 2×free buttons) · dynamic descriptor tables carved from heap tail with grow/shrink.', 't-warn');
     logLine('QUICK_FIT_HINT (v1) is ON by default (CONFIG_MXR_QUICK_FIT_HINT_ENABLE=y) — turn it off to compare against the full-scan path. MXR_BINNING requires it (Kconfig dependency).', 't-warn');
   </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a40cb3372c0bea0f',t:'MTc5MDM2NzMxNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a413b7c32a9109e8',t:'MTc5MDQ0MDkwNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 
 </html>
