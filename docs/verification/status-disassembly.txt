@@ -1,0 +1,225 @@
+40213fe8 <mxr_collect_status_locked>:
+40213fe8:	c0c112        	addi	a1, a1, -64
+40213feb:	f109      	s32i.n	a0, a1, 60
+40213fed:	e1c9      	s32i.n	a12, a1, 56
+40213fef:	d1d9      	s32i.n	a13, a1, 52
+40213ff1:	c1e9      	s32i.n	a14, a1, 48
+40213ff3:	b1f9      	s32i.n	a15, a1, 44
+40213ff5:	5129      	s32i.n	a2, a1, 20
+40213ff7:	1fb216        	beqz	a2, 402141f6 <mxr_collect_status_locked+0x20e>
+40213ffa:	f0d221        	l32r	a2, 40210344 <_stext+0x334>
+40213ffd:	0012b2        	l16ui	a11, a2, 0
+40214000:	f0d221        	l32r	a2, 40210348 <_stext+0x338>
+40214003:	52b9      	s32i.n	a11, a2, 20
+40214005:	040c      	movi.n	a4, 0
+40214007:	6249      	s32i.n	a4, a2, 24
+40214009:	f0cb51        	l32r	a5, 40210338 <_stext+0x328>
+4021400c:	000552        	l8ui	a5, a5, 0
+4021400f:	4159      	s32i.n	a5, a1, 16
+40214011:	1259      	s32i.n	a5, a2, 4
+40214013:	2249      	s32i.n	a4, a2, 8
+40214015:	04dd      	mov.n	a13, a4
+40214017:	046d      	mov.n	a6, a4
+40214019:	3149      	s32i.n	a4, a1, 12
+4021401b:	0149      	s32i.n	a4, a1, 0
+4021401d:	04fd      	mov.n	a15, a4
+4021401f:	042d      	mov.n	a2, a4
+40214021:	2149      	s32i.n	a4, a1, 8
+40214023:	04cd      	mov.n	a12, a4
+40214025:	1149      	s32i.n	a4, a1, 4
+40214027:	0030c6        	j	402140ee <mxr_collect_status_locked+0x106>
+4021402a:	0ded      	mov.n	a14, a13
+4021402c:	115df0        	slli	a5, a13, 1
+4021402f:	55da      	add.n	a5, a5, a13
+40214031:	1145c0        	slli	a4, a5, 4
+40214034:	f0c051        	l32r	a5, 40210334 <_stext+0x324>
+40214037:	454a      	add.n	a4, a5, a4
+40214039:	2498      	l32i.n	a9, a4, 8
+4021403b:	1158      	l32i.n	a5, a1, 4
+4021403d:	559a      	add.n	a5, a5, a9
+4021403f:	1159      	s32i.n	a5, a1, 4
+40214041:	5458      	l32i.n	a5, a4, 20
+40214043:	cc5a      	add.n	a12, a12, a5
+40214045:	1478      	l32i.n	a7, a4, 4
+40214047:	997a      	add.n	a9, a9, a7
+40214049:	0a0c      	movi.n	a10, 0
+4021404b:	0010c6        	j	40214092 <mxr_collect_status_locked+0xaa>
+4021404e:	d00000        	subx2	a0, a0, a0
+40214051:	411156        	bnez	a1, 40214466 <mxr_init_iram_fb_regions+0x22>
+40214054:	be          	.byte 0xbe
+40214055:	545af0        	extui	a5, a15, 10, 6
+40214058:	0548      	l32i.n	a4, a5, 0
+4021405a:	f0bd81        	l32r	a8, 40210350 <_stext+0x340>
+4021405d:	104480        	and	a4, a4, a8
+40214060:	1558      	l32i.n	a5, a5, 4
+40214062:	105580        	and	a5, a5, a8
+40214065:	554a      	add.n	a5, a5, a4
+40214067:	2ab497        	bgeu	a4, a9, 40214095 <mxr_collect_status_locked+0xad>
+4021406a:	1ab747        	bgeu	a7, a4, 40214088 <mxr_collect_status_locked+0xa0>
+4021406d:	c04470        	sub	a4, a4, a7
+40214070:	01ba47        	bgeu	a10, a4, 40214075 <mxr_collect_status_locked+0x8d>
+40214073:	04ad      	mov.n	a10, a4
+40214075:	f38c      	beqz.n	a3, 40214088 <mxr_collect_status_locked+0xa0>
+40214077:	224a      	add.n	a2, a2, a4
+40214079:	ff1b      	addi.n	a15, a15, 1
+4021407b:	440b      	addi.n	a4, a4, -1
+4021407d:	0774f6        	bgeui	a4, 7, 40214088 <mxr_collect_status_locked+0xa0>
+40214080:	002142        	l32i	a4, a1, 0
+40214083:	441b      	addi.n	a4, a4, 1
+40214085:	006142        	s32i	a4, a1, 0
+40214088:	01b757        	bgeu	a7, a5, 4021408d <mxr_collect_status_locked+0xa5>
+4021408b:	057d      	mov.n	a7, a5
+4021408d:	661b      	addi.n	a6, a6, 1
+4021408f:	f46060        	extui	a6, a6, 0, 16
+40214092:	ba36b7        	bltu	a6, a11, 40214050 <mxr_collect_status_locked+0x68>
+40214095:	18b797        	bgeu	a7, a9, 402140b1 <mxr_collect_status_locked+0xc9>
+40214098:	c07970        	sub	a7, a9, a7
+4021409b:	01ba77        	bgeu	a10, a7, 402140a0 <mxr_collect_status_locked+0xb8>
+4021409e:	07ad      	mov.n	a10, a7
+402140a0:	d38c      	beqz.n	a3, 402140b1 <mxr_collect_status_locked+0xc9>
+402140a2:	227a      	add.n	a2, a2, a7
+402140a4:	ff1b      	addi.n	a15, a15, 1
+402140a6:	770b      	addi.n	a7, a7, -1
+402140a8:	0577f6        	bgeui	a7, 7, 402140b1 <mxr_collect_status_locked+0xc9>
+402140ab:	0158      	l32i.n	a5, a1, 0
+402140ad:	551b      	addi.n	a5, a5, 1
+402140af:	0159      	s32i.n	a5, a1, 0
+402140b1:	114ef0        	slli	a4, a14, 1
+402140b4:	44ea      	add.n	a4, a4, a14
+402140b6:	1154c0        	slli	a5, a4, 4
+402140b9:	f09e41        	l32r	a4, 40210334 <_stext+0x324>
+402140bc:	445a      	add.n	a4, a4, a5
+402140be:	84a9      	s32i.n	a10, a4, 32
+402140c0:	150c      	movi.n	a5, 1
+402140c2:	9459      	s32i.n	a5, a4, 36
+402140c4:	032142        	l32i	a4, a1, 12
+402140c7:	01b4a7        	bgeu	a4, a10, 402140cc <mxr_collect_status_locked+0xe4>
+402140ca:	31a9      	s32i.n	a10, a1, 12
+402140cc:	114ef0        	slli	a4, a14, 1
+402140cf:	e4ea      	add.n	a14, a4, a14
+402140d1:	114ec0        	slli	a4, a14, 4
+402140d4:	f09851        	l32r	a5, 40210334 <_stext+0x324>
+402140d7:	454a      	add.n	a4, a5, a4
+402140d9:	4448      	l32i.n	a4, a4, 16
+402140db:	348c      	beqz.n	a4, 402140e2 <mxr_collect_status_locked+0xfa>
+402140dd:	01b4a7        	bgeu	a4, a10, 402140e2 <mxr_collect_status_locked+0xfa>
+402140e0:	04ad      	mov.n	a10, a4
+402140e2:	2158      	l32i.n	a5, a1, 8
+402140e4:	01b5a7        	bgeu	a5, a10, 402140e9 <mxr_collect_status_locked+0x101>
+402140e7:	21a9      	s32i.n	a10, a1, 8
+402140e9:	dd1b      	addi.n	a13, a13, 1
+402140eb:	74d0d0        	extui	a13, a13, 0, 8
+402140ee:	4148      	l32i.n	a4, a1, 16
+402140f0:	02bd47        	bgeu	a13, a4, 402140f6 <mxr_collect_status_locked+0x10e>
+402140f3:	ffccc6        	j	4021402a <mxr_collect_status_locked+0x42>
+402140f6:	d3ac      	beqz.n	a3, 40214127 <mxr_collect_status_locked+0x13f>
+402140f8:	f09431        	l32r	a3, 40210348 <_stext+0x338>
+402140fb:	2063f2        	s32i	a15, a3, 128
+402140fe:	0158      	l32i.n	a5, a1, 0
+40214100:	216352        	s32i	a5, a3, 132
+40214103:	a29c      	beqz.n	a2, 40214121 <mxr_collect_status_locked+0x139>
+40214105:	3148      	l32i.n	a4, a1, 12
+40214107:	c03240        	sub	a3, a2, a4
+4021410a:	1143e0        	slli	a4, a3, 2
+4021410d:	343a      	add.n	a3, a4, a3
+4021410f:	1143e0        	slli	a4, a3, 2
+40214112:	334a      	add.n	a3, a3, a4
+40214114:	1143e0        	slli	a4, a3, 2
+40214117:	023d      	mov.n	a3, a2
+40214119:	042d      	mov.n	a2, a4
+4021411b:	f00801        	l32r	a0, 4021013c <_stext+0x12c>
+4021411e:	0000c0        	callx0	a0
+40214121:	f08931        	l32r	a3, 40210348 <_stext+0x338>
+40214124:	1f6322        	s32i	a2, a3, 124
+40214127:	f08821        	l32r	a2, 40210348 <_stext+0x338>
+4021412a:	030c      	movi.n	a3, 0
+4021412c:	c239      	s32i.n	a3, a2, 48
+4021412e:	d239      	s32i.n	a3, a2, 52
+40214130:	e239      	s32i.n	a3, a2, 56
+40214132:	f239      	s32i.n	a3, a2, 60
+40214134:	106232        	s32i	a3, a2, 64
+40214137:	116232        	s32i	a3, a2, 68
+4021413a:	156232        	s32i	a3, a2, 84
+4021413d:	166232        	s32i	a3, a2, 88
+40214140:	176232        	s32i	a3, a2, 92
+40214143:	f08431        	l32r	a3, 40210354 <_stext+0x344>
+40214146:	001332        	l16ui	a3, a3, 0
+40214149:	6239      	s32i.n	a3, a2, 24
+4021414b:	f08331        	l32r	a3, 40210358 <_stext+0x348>
+4021414e:	000332        	l8ui	a3, a3, 0
+40214151:	2239      	s32i.n	a3, a2, 8
+40214153:	f08221        	l32r	a2, 4021035c <_stext+0x34c>
+40214156:	000222        	l8ui	a2, a2, 0
+40214159:	05b216        	beqz	a2, 402141b8 <mxr_collect_status_locked+0x1d0>
+4021415c:	f08121        	l32r	a2, 40210360 <_stext+0x350>
+4021415f:	0248      	l32i.n	a4, a2, 0
+40214161:	1158      	l32i.n	a5, a1, 4
+40214163:	554a      	add.n	a5, a5, a4
+40214165:	1159      	s32i.n	a5, a1, 4
+40214167:	f07f21        	l32r	a2, 40210364 <_stext+0x354>
+4021416a:	0238      	l32i.n	a3, a2, 0
+4021416c:	cc3a      	add.n	a12, a12, a3
+4021416e:	f07621        	l32r	a2, 40210348 <_stext+0x338>
+40214171:	c249      	s32i.n	a4, a2, 48
+40214173:	d239      	s32i.n	a3, a2, 52
+40214175:	f07c31        	l32r	a3, 40210368 <_stext+0x358>
+40214178:	0338      	l32i.n	a3, a3, 0
+4021417a:	e239      	s32i.n	a3, a2, 56
+4021417c:	f07c31        	l32r	a3, 4021036c <_stext+0x35c>
+4021417f:	0338      	l32i.n	a3, a3, 0
+40214181:	f239      	s32i.n	a3, a2, 60
+40214183:	f07b31        	l32r	a3, 40210370 <_stext+0x360>
+40214186:	0338      	l32i.n	a3, a3, 0
+40214188:	106232        	s32i	a3, a2, 64
+4021418b:	f07a31        	l32r	a3, 40210374 <_stext+0x364>
+4021418e:	0338      	l32i.n	a3, a3, 0
+40214190:	116232        	s32i	a3, a2, 68
+40214193:	f07931        	l32r	a3, 40210378 <_stext+0x368>
+40214196:	0338      	l32i.n	a3, a3, 0
+40214198:	156232        	s32i	a3, a2, 84
+4021419b:	f07831        	l32r	a3, 4021037c <_stext+0x36c>
+4021419e:	0338      	l32i.n	a3, a3, 0
+402141a0:	166232        	s32i	a3, a2, 88
+402141a3:	f07731        	l32r	a3, 40210380 <_stext+0x370>
+402141a6:	0338      	l32i.n	a3, a3, 0
+402141a8:	176232        	s32i	a3, a2, 92
+402141ab:	f07601        	l32r	a0, 40210384 <_stext+0x374>
+402141ae:	0000c0        	callx0	a0
+402141b1:	2138      	l32i.n	a3, a1, 8
+402141b3:	01b327        	bgeu	a3, a2, 402141b8 <mxr_collect_status_locked+0x1d0>
+402141b6:	2129      	s32i.n	a2, a1, 8
+402141b8:	f06421        	l32r	a2, 40210348 <_stext+0x338>
+402141bb:	1148      	l32i.n	a4, a1, 4
+402141bd:	8249      	s32i.n	a4, a2, 32
+402141bf:	92c9      	s32i.n	a12, a2, 36
+402141c1:	2158      	l32i.n	a5, a1, 8
+402141c3:	b259      	s32i.n	a5, a2, 44
+402141c5:	a228      	l32i.n	a2, a2, 40
+402141c7:	22bc27        	bgeu	a12, a2, 402141ed <mxr_collect_status_locked+0x205>
+402141ca:	f05f21        	l32r	a2, 40210348 <_stext+0x338>
+402141cd:	a2c9      	s32i.n	a12, a2, 40
+402141cf:	000686        	j	402141ed <mxr_collect_status_locked+0x205>
+402141d2:	e00000        	subx4	a0, a0, a0
+402141d5:	411123        	excw
+402141d8:	f05c      	movi.n	a0, 95
+402141da:	424a      	add.n	a4, a2, a4
+402141dc:	252a      	add.n	a2, a5, a2
+402141de:	0020c0        	memw
+402141e1:	0448      	l32i.n	a4, a4, 0
+402141e3:	0020c0        	memw
+402141e6:	0249      	s32i.n	a4, a2, 0
+402141e8:	331b      	addi.n	a3, a3, 1
+402141ea:	0000c6        	j	402141f1 <mxr_collect_status_locked+0x209>
+402141ed:	030c      	movi.n	a3, 0
+402141ef:	5158      	l32i.n	a5, a1, 20
+402141f1:	223c      	movi.n	a2, 50
+402141f3:	ddb237        	bgeu	a2, a3, 402141d4 <mxr_collect_status_locked+0x1ec>
+402141f6:	f108      	l32i.n	a0, a1, 60
+402141f8:	e1c8      	l32i.n	a12, a1, 56
+402141fa:	d1d8      	l32i.n	a13, a1, 52
+402141fc:	c1e8      	l32i.n	a14, a1, 48
+402141fe:	b1f8      	l32i.n	a15, a1, 44
+40214200:	40c112        	addi	a1, a1, 64
+40214203:	f00d      	ret.n
+40214205:	000000        	ill
+

@@ -1,0 +1,82 @@
+
+/tmp/tmpd7ohm5e3/helpers.o:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram1.text:
+
+00000000 <mxr_memcpy4>:
+   0:	414240        	srli	a4, a4, 2
+   3:	016416        	beqz	a4, 1d <mxr_memcpy4+0x1d>
+			3: R_XTENSA_SLOT0_OP	.iram1.text+0x1d
+   6:	1144e0        	slli	a4, a4, 2
+   9:	805340        	add	a5, a3, a4
+   c:	0020c0        	memw
+   f:	0348      	l32i.n	a4, a3, 0
+  11:	334b      	addi.n	a3, a3, 4
+  13:	0020c0        	memw
+  16:	0249      	s32i.n	a4, a2, 0
+  18:	224b      	addi.n	a2, a2, 4
+  1a:	ee9357        	bne	a3, a5, c <mxr_memcpy4+0xc>
+			1a: R_XTENSA_SLOT0_OP	.iram1.text+0xc
+  1d:	f00d      	ret.n
+	...
+
+00000020 <mxr_memmove4>:
+  20:	414240        	srli	a4, a4, 2
+  23:	491237        	beq	a2, a3, 70 <mxr_memmove4+0x50>
+			23: R_XTENSA_SLOT0_OP	.iram1.text+0x70
+  26:	026d      	mov.n	a6, a2
+  28:	035d      	mov.n	a5, a3
+  2a:	043237        	bltu	a2, a3, 32 <mxr_memmove4+0x12>
+			2a: R_XTENSA_SLOT0_OP	.iram1.text+0x32
+  2d:	c4dc      	bnez.n	a4, 4d <mxr_memmove4+0x2d>
+			2d: R_XTENSA_SLOT0_OP	.iram1.text+0x4d
+  2f:	000f46        	j	70 <mxr_memmove4+0x50>
+			2f: R_XTENSA_SLOT0_OP	.iram1.text+0x70
+  32:	a4bc      	beqz.n	a4, 70 <mxr_memmove4+0x50>
+			32: R_XTENSA_SLOT0_OP	.iram1.text+0x70
+  34:	1144e0        	slli	a4, a4, 2
+  37:	434a      	add.n	a4, a3, a4
+  39:	0020c0        	memw
+  3c:	0528      	l32i.n	a2, a5, 0
+  3e:	554b      	addi.n	a5, a5, 4
+  40:	0020c0        	memw
+  43:	0629      	s32i.n	a2, a6, 0
+  45:	664b      	addi.n	a6, a6, 4
+  47:	ee9457        	bne	a4, a5, 39 <mxr_memmove4+0x19>
+			47: R_XTENSA_SLOT0_OP	.iram1.text+0x39
+  4a:	000886        	j	70 <mxr_memmove4+0x50>
+			4a: R_XTENSA_SLOT0_OP	.iram1.text+0x70
+  4d:	1144e0        	slli	a4, a4, 2
+  50:	fcc452        	addi	a5, a4, -4
+  53:	435a      	add.n	a4, a3, a5
+  55:	225a      	add.n	a2, a2, a5
+  57:	000046        	j	5c <mxr_memmove4+0x3c>
+			57: R_XTENSA_SLOT0_OP	.iram1.text+0x5c
+  5a:	064d      	mov.n	a4, a6
+  5c:	0020c0        	memw
+  5f:	0458      	l32i.n	a5, a4, 0
+  61:	fcc462        	addi	a6, a4, -4
+  64:	0020c0        	memw
+  67:	006252        	s32i	a5, a2, 0
+  6a:	fcc222        	addi	a2, a2, -4
+  6d:	e99347        	bne	a3, a4, 5a <mxr_memmove4+0x3a>
+			6d: R_XTENSA_SLOT0_OP	.iram1.text+0x5a
+  70:	f00d      	ret.n
+	...
+
+00000074 <mxr_memset4>:
+  74:	413230        	srli	a3, a3, 2
+  77:	f38c      	beqz.n	a3, 8a <mxr_memset4+0x16>
+			77: R_XTENSA_SLOT0_OP	.iram1.text+0x8a
+  79:	1133e0        	slli	a3, a3, 2
+  7c:	323a      	add.n	a3, a2, a3
+  7e:	040c      	movi.n	a4, 0
+  80:	0020c0        	memw
+  83:	0249      	s32i.n	a4, a2, 0
+  85:	224b      	addi.n	a2, a2, 4
+  87:	f59237        	bne	a2, a3, 80 <mxr_memset4+0xc>
+			87: R_XTENSA_SLOT0_OP	.iram1.text+0x80
+  8a:	f00d      	ret.n
+
+O2 forced out-of-line IRAM word helpers: no byte/halfword accesses or calls; PASS

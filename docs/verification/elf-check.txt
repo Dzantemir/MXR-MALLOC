@@ -1,0 +1,8 @@
+s_stats 0x40107ba0 inside startup-zeroed IRAM BSS
+s_region 0x401078dc inside startup-zeroed IRAM BSS
+s_iram_fb_region 0x40107a2c inside startup-zeroed IRAM BSS
+s_dram_desc 0x40108078 inside startup-zeroed IRAM BSS
+s_iram_desc 0x40107c78 inside startup-zeroed IRAM BSS
+Boundary: SDK ets_printf panic path excluded (unbalanced critical nesting).
+Resolved normal allocator call closure: 47 functions, no flash code/literal-pool fetches; PASS
+Pointer-derived data accesses and asynchronous interrupt/NMI paths still require hardware validation.

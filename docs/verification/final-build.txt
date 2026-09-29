@@ -1,0 +1,141 @@
+[0/1] Re-running CMake...
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at /home/user/esp-sdk/tools/cmake/project.cmake:2 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  CMakeLists.txt:4 (include)
+
+
+-- Project version: 8df0101-dirty
+-- Building ESP-IDF components for target esp8266
+-- Checking Python dependencies...
+/home/user/esp-sdk/tools/check_python_dependencies.py:22: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Python requirements from /home/user/esp-sdk/requirements.txt are satisfied.
+Loading defaults file /home/user/mxr-review/examples/validation/sdkconfig.defaults...
+CMake Deprecation Warning at /home/user/esp-sdk/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at /home/user/esp-sdk/components/mbedtls/mbedtls/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Warning (dev) at /home/user/esp-sdk/components/mbedtls/mbedtls/CMakeLists.txt:49 (find_package):
+  Policy CMP0148 is not set: The FindPythonInterp and FindPythonLibs modules
+  are removed.  Run "cmake --help-policy CMP0148" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Adding linker script /home/user/.cache/mxr-build/esp-idf/esp8266/esp8266_out.ld
+-- Adding linker script /home/user/esp-sdk/components/esp8266/ld/esp8266.project.ld.in
+-- Adding linker script /home/user/esp-sdk/components/esp8266/ld/esp8266.rom.ld
+-- Adding linker script /home/user/esp-sdk/components/esp8266/ld/esp8266.peripherals.ld
+-- MxR-malloc: DRAM region percent sum = 70% (remaining 30% goes to last region)
+-- MxR-malloc: 7 DRAM region(s) from '4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%'
+-- MxR-malloc: IRAM region percent sum = 70% (remaining 30% goes to last region)
+-- MxR-malloc: 7 IRAM fallback region(s) from '4-8%,32-10%,64-10%,128-12%,256-10%,512-20%,1024-0%'
+-- Components: app_update bootloader bootloader_support esp8266 esp_common esp_event esp_ringbuf esptool_py freertos heap log lwip main mbedtls mxr_malloc newlib nvs_flash partition_table pthread spi_flash tcpip_adapter vfs wpa_supplicant
+-- Component paths: /home/user/esp-sdk/components/app_update /home/user/esp-sdk/components/bootloader /home/user/esp-sdk/components/bootloader_support /home/user/esp-sdk/components/esp8266 /home/user/esp-sdk/components/esp_common /home/user/esp-sdk/components/esp_event /home/user/esp-sdk/components/esp_ringbuf /home/user/esp-sdk/components/esptool_py /home/user/esp-sdk/components/freertos /home/user/esp-sdk/components/heap /home/user/esp-sdk/components/log /home/user/esp-sdk/components/lwip /home/user/mxr-review/examples/validation/main /home/user/esp-sdk/components/mbedtls /home/user/mxr-review/mxr_malloc /home/user/esp-sdk/components/newlib /home/user/esp-sdk/components/nvs_flash /home/user/esp-sdk/components/partition_table /home/user/esp-sdk/components/pthread /home/user/esp-sdk/components/spi_flash /home/user/esp-sdk/components/tcpip_adapter /home/user/esp-sdk/components/vfs /home/user/esp-sdk/components/wpa_supplicant
+-- Configuring done (0.9s)
+CMake Warning (dev) at /home/user/esp-sdk/tools/cmake/component.cmake:437 (add_library):
+  Policy CMP0115 is not set: Source file extensions must be explicit.  Run
+  "cmake --help-policy CMP0115" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+
+  File:
+
+    /home/user/esp-sdk/components/spi_flash/src/partition.c
+Call Stack (most recent call first):
+  /home/user/esp-sdk/components/spi_flash/CMakeLists.txt:15 (idf_component_register)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Generating done (0.1s)
+-- Build files have been written to: /home/user/.cache/mxr-build
+[1/9] Performing build step for 'bootloader'
+[0/1] Re-running CMake...
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at /home/user/esp-sdk/tools/cmake/project.cmake:2 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  CMakeLists.txt:20 (include)
+
+
+-- Project version: 858c7c2
+-- Building ESP-IDF components for target esp8266
+CMake Deprecation Warning at /home/user/esp-sdk/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Adding linker script /home/user/esp-sdk/components/bootloader/subproject/main/esp8266.bootloader.ld
+-- Adding linker script /home/user/esp-sdk/components/bootloader/subproject/main/esp8266.bootloader.rom.ld
+-- Adding linker script /home/user/esp-sdk/components/esp8266/ld/esp8266.rom.ld
+-- Components: bootloader bootloader_support esp8266 esp_common esptool_py log main partition_table spi_flash
+-- Component paths: /home/user/esp-sdk/components/bootloader /home/user/esp-sdk/components/bootloader_support /home/user/esp-sdk/components/esp8266 /home/user/esp-sdk/components/esp_common /home/user/esp-sdk/components/esptool_py /home/user/esp-sdk/components/log /home/user/esp-sdk/components/bootloader/subproject/main /home/user/esp-sdk/components/partition_table /home/user/esp-sdk/components/spi_flash
+-- Configuring done (0.3s)
+CMake Warning (dev) at /home/user/esp-sdk/tools/cmake/component.cmake:437 (add_library):
+  Policy CMP0115 is not set: Source file extensions must be explicit.  Run
+  "cmake --help-policy CMP0115" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+
+  File:
+
+    /home/user/esp-sdk/components/spi_flash/src/partition.c
+Call Stack (most recent call first):
+  /home/user/esp-sdk/components/spi_flash/CMakeLists.txt:15 (idf_component_register)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Generating done (0.0s)
+-- Build files have been written to: /home/user/.cache/mxr-build/bootloader
+ninja: no work to do.
+[2/9] No install step for 'bootloader'
+[3/9] Completed 'bootloader'
+[4/9] Building C object esp-idf/mxr_malloc/CMakeFiles/__idf_mxr_malloc.dir/mxr_malloc.c.obj
+[5/9] Linking CXX static library esp-idf/mxr_malloc/libmxr_malloc.a
+[6/9] Generating ld/esp8266.project.ld
+[7/9] Linking CXX executable mxr_validation.elf
+[8/9] Generating binary image from built executable
+esptool.py v2.4.0
+Generated /home/user/.cache/mxr-build/mxr_validation.bin

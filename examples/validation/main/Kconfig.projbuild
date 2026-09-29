@@ -1,0 +1,11 @@
+menu "MxR validation (development board only)"
+config MXR_TEST_CACHE_OFF
+    bool "Run destructive cache-off smoke test"
+    default n
+    depends on MXR_IRAM_PATH_ALLOC_FAMILY && MXR_CANARY && MXR_DOUBLE_FREE_DETECT
+    help
+        Runs after init with SDK critical section and NMI masked.
+        Intentionally corrupts a canary and repeats a free to exercise
+        deferred error reporting. Use a disposable development board.
+        Not suitable for production or an active Wi-Fi connection.
+endmenu
