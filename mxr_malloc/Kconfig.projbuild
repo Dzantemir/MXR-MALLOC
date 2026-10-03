@@ -329,12 +329,16 @@ menu "MxR-Malloc"
 
     config MXR_DEFAULT_DRAM_ONLY
         bool "Keep ordinary malloc/calloc/realloc/zalloc in byte-addressable DRAM"
-        default n
+        default y
         help
             If enabled, ordinary MxR, libc and default-pool wrappers request
-            8BIT | 32BIT memory. Explicit capability requests are unchanged.
+            8BIT | 32BIT memory. This is the safe default because arbitrary
+            libc callers may legally perform byte accesses. Explicit
+            capability requests are unchanged.
             If disabled, preserve ESP8266 RTOS SDK's 32BIT default policy,
             which may allow IRAM fallback and byte-access emulation.
+            Disable only when every ordinary allocation is known to be
+            32-bit-access-only.
             esp_get_free_heap_size keeps SDK semantics (32BIT total);
             use an explicit 8BIT or DRAM query for byte-addressable capacity.
 
@@ -927,10 +931,12 @@ menu "MxR-Malloc"
             a 4-byte tail canary written on every successful allocation
             and checked on free()/realloc().
 
-            On violation the allocator logs the block offset/length and
-            SKIPS the free (the block leaks, but the heap stays
-            consistent and the evidence block is preserved). Counter:
-            mxr_get_status().canary_violations.
+            On violation the allocator quarantines the block and SKIPS
+            the free (the block leaks, but the heap stays consistent and
+            the evidence block is preserved). It increments
+            mxr_get_status().canary_violations; it does not log from the
+            allocator critical section. Call mxr_dump() later, with normal
+            logging available, to see deferred error counters.
 
             Overhead: +8 B per block (higher memory usage; on small
             blocks ~+30%).
@@ -942,8 +948,10 @@ menu "MxR-Malloc"
             Keeps a small FIFO ring of the most recently freed blocks
             (offset + length + arena). A free() whose descriptor is not
             found but whose offset matches a ring entry is classified
-            as a double-free: it is logged, counted
-            (mxr_get_status().double_free_detects) and skipped.
+            as a double-free, counted in
+            mxr_get_status().double_free_detects and skipped. No
+            per-event log is emitted while the allocator lock is held;
+            mxr_dump() can report the deferred counter later.
 
             A stale pointer reused via realloc() cannot be detected
             with plain pointers; combine with block canaries for the

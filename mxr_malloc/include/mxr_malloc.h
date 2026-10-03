@@ -579,7 +579,7 @@ typedef uint32_t mxr_count_t;
     mxr_class_t max_bytes;
     uint32_t free_bytes;
     uint32_t min_free_bytes;
-    uint32_t largest_free_bytes;
+    uint32_t largest_free_bytes; /* largest raw internal gap, class-limited */
     mxr_count_t alloc_count;
   } mxr_region_status_t;
 
@@ -599,7 +599,7 @@ typedef uint32_t mxr_count_t;
     size_t total_bytes;
     size_t free_bytes;
     size_t min_free_bytes;
-    size_t largest_free_block_bytes;
+    size_t largest_free_block_bytes; /* largest allocatable user payload estimate */
     size_t iram_total_bytes;
     size_t iram_free_bytes;
     size_t iram_min_free_bytes;
@@ -761,6 +761,7 @@ typedef uint32_t mxr_count_t;
   bool mxr_get_iram_fb_region_status(int region_index, mxr_region_status_t *status);
   void mxr_dump(void);
   size_t mxr_get_total_size_caps(uint32_t caps);
+  /* Maximum user payload estimate for current qualifying gaps. Not a reservation. */
   size_t mxr_get_largest_free_block_caps(uint32_t caps);
   size_t mxr_get_allocated_size_caps(uint32_t caps);
 

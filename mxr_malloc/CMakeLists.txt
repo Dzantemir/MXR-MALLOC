@@ -81,18 +81,20 @@ if(_MXR_CFG)
         "Only the last region may have percent 0.")
         endif()
 
-        # FIX(4.2): при COMPACT_TYPES граница не может быть > 65535
-        if(CONFIG_MXR_COMPACT_TYPES AND _BOUNDARY GREATER 65535)
-            message(FATAL_ERROR
-                "MxR-malloc: DRAM region boundary ${_BOUNDARY} exceeds 65535 "
-                "while CONFIG_MXR_COMPACT_TYPES=y")
-        endif()
-
-        # FIX(4.2): границы должны строго возрастать ПОСЛЕ align4
+        # Compact 16-bit fields store the aligned boundary. 65534/65535
+        # align to 65536 and would wrap to zero. State-in-IRAM uses 32-bit
+        # region fields, so the compact limit does not apply there.
         math(EXPR _ALIGNED "((${_BOUNDARY} + 3) / 4) * 4")
         if(_ALIGNED LESS 4)
             set(_ALIGNED 4)
         endif()
+        if(CONFIG_MXR_COMPACT_TYPES AND NOT CONFIG_MXR_STATE_IN_IRAM AND _ALIGNED GREATER 65535)
+            message(FATAL_ERROR
+                "MxR-malloc: aligned DRAM region boundary ${_ALIGNED} exceeds 65535 "
+                "while CONFIG_MXR_COMPACT_TYPES=y")
+        endif()
+
+        # Boundaries must strictly increase after 4-byte alignment.
         if(NOT _ALIGNED GREATER _MXR_PREV_ALIGNED)
             message(FATAL_ERROR
                 "MxR-malloc: DRAM region boundaries must be strictly "
@@ -191,17 +193,15 @@ if(CONFIG_MXR_USE_IRAM AND CONFIG_MXR_IRAM_FALLBACK_ENABLED)
             "entry. Only the last region may have percent 0.")
             endif()
 
-            # FIX(4.2): ограничение COMPACT_TYPES
-            if(CONFIG_MXR_COMPACT_TYPES AND _BOUNDARY GREATER 65535)
-                message(FATAL_ERROR
-                    "MxR-malloc: IRAM fallback region boundary ${_BOUNDARY} "
-                    "exceeds 65535 while CONFIG_MXR_COMPACT_TYPES=y")
-            endif()
-
             # FIX(4.2): строго возрастающие границы после align4
             math(EXPR _ALIGNED "((${_BOUNDARY} + 3) / 4) * 4")
             if(_ALIGNED LESS 4)
                 set(_ALIGNED 4)
+            endif()
+            if(CONFIG_MXR_COMPACT_TYPES AND NOT CONFIG_MXR_STATE_IN_IRAM AND _ALIGNED GREATER 65535)
+                message(FATAL_ERROR
+                    "MxR-malloc: aligned IRAM fallback region boundary ${_ALIGNED} exceeds 65535 "
+                    "while CONFIG_MXR_COMPACT_TYPES=y")
             endif()
             if(NOT _ALIGNED GREATER _MXR_PREV_ALIGNED)
                 message(FATAL_ERROR
@@ -254,6 +254,16 @@ endif()
 # ============================================================
 #  4. Linker wraps (ONLY applied in Wrap mode!)
 # ============================================================
+if(CONFIG_MXR_INTEGRATION_WRAP AND CONFIG_MXR_WRAP_LIBC AND
+   CONFIG_MXR_USE_IRAM AND CONFIG_MXR_IRAM_FALLBACK_ENABLED AND
+   NOT CONFIG_MXR_DEFAULT_DRAM_ONLY)
+    message(WARNING
+        "MxR-malloc: WRAP_LIBC + IRAM fallback + MXR_DEFAULT_DRAM_ONLY=n "
+        "allows ordinary libc malloc() pointers to land in non-byte-addressable IRAM. "
+        "This is unsafe unless every such allocation is accessed with 32-bit-only operations. "
+        "Prefer CONFIG_MXR_DEFAULT_DRAM_ONLY=y.")
+endif()
+
 if(CONFIG_MXR_INTEGRATION_WRAP)
     set(MXR_WRAP_FLAGS
         "-Wl,--wrap=heap_caps_init"
